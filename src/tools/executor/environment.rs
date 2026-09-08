@@ -1,4 +1,4 @@
-//! Execution environment abstraction for auxloclaw.
+//! Execution environment abstraction for ahnara.
 //!
 //! Provides a unified interface for running commands in different
 //! environments: local host, Docker containers, or SSH remote hosts.
@@ -228,7 +228,7 @@ impl<E: Environment> ExecutionEngine<E> {
     // -- internals --
 
     fn cwd_marker(&self) -> String {
-        format!("__AUXLOCLAW_CWD_{}__", self.session_id)
+        format!("__AHNARA_CWD_{}__", self.session_id)
     }
 
     fn wrap_command(&self, command: &str) -> String {

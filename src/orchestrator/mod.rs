@@ -91,8 +91,8 @@ impl ToolOrchestrator {
     pub fn register_schedule_tool(&self, log: crate::scheduler::ScheduleRunLog) {
         use crate::tools::scheduler_tools::{SchedulerManager, ListScheduledJobsEnhancedTool};
         let config_path = dirs::home_dir()
-            .map(|h| h.join(".auxloclaw/config.toml"))
-            .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw/config.toml"));
+            .map(|h| h.join(".ahnara/config.toml"))
+            .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara/config.toml"));
         let manager = SchedulerManager::new(log, config_path.to_string_lossy().to_string());
         self.register(Arc::new(ListScheduledJobsEnhancedTool::new(manager)));
     }
@@ -212,8 +212,8 @@ impl ToolOrchestrator {
 
     /// Hot-reload MCP servers from current config on disk.
     pub async fn reload_mcp(&self) -> anyhow::Result<(usize, Vec<String>)> {
-        let path = std::env::var("AUXLOCLAW_CONFIG")
-            .unwrap_or_else(|_| "~/.auxloclaw/config.toml".into());
+        let path = std::env::var("AHNARA_CONFIG")
+            .unwrap_or_else(|_| "~/.ahnara/config.toml".into());
         let expanded = if path.starts_with('~') {
             dirs::home_dir()
                 .unwrap_or_else(|| "/root".into())
@@ -221,7 +221,7 @@ impl ToolOrchestrator {
         } else {
             std::path::PathBuf::from(&path)
         };
-        let config = crate::config::AppConfig::load(expanded.to_str().unwrap_or("~/.auxloclaw/config.toml"))?;
+        let config = crate::config::AppConfig::load(expanded.to_str().unwrap_or("~/.ahnara/config.toml"))?;
         let count = self.register_mcp_tools(&config.mcp).await?;
         Ok((count, self.mcp_summaries()))
     }
@@ -331,7 +331,7 @@ mod tests {
 
     #[tokio::test]
     async fn approval_blocks_destructive_tool_call() {
-        std::env::set_var("AUXLOCLAW_APPROVAL_MODE", "smart");
+        std::env::set_var("AHNARA_APPROVAL_MODE", "smart");
         let orchestrator = ToolOrchestrator::new();
         let result = orchestrator
             .execute_tool(
@@ -342,12 +342,12 @@ mod tests {
         assert!(!result.success);
         assert_eq!(result.output["risk"], "critical");
         assert_eq!(result.output["requires_approval"], false);
-        std::env::remove_var("AUXLOCLAW_APPROVAL_MODE");
+        std::env::remove_var("AHNARA_APPROVAL_MODE");
     }
 
     #[tokio::test]
     async fn approval_allows_low_risk_tool_call() {
-        std::env::set_var("AUXLOCLAW_APPROVAL_MODE", "smart");
+        std::env::set_var("AHNARA_APPROVAL_MODE", "smart");
         let orchestrator = ToolOrchestrator::new();
         let result = orchestrator
             .execute_tool(
@@ -357,6 +357,6 @@ mod tests {
             .await;
         assert!(result.success);
         assert_eq!(result.output["stdout"], "approval-ok\n");
-        std::env::remove_var("AUXLOCLAW_APPROVAL_MODE");
+        std::env::remove_var("AHNARA_APPROVAL_MODE");
     }
 }

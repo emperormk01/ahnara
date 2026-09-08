@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="Auxlo-xyz/auxloclaw"
-BINARY="auxloclaw"
+REPO="Auxlo-xyz/ahnara"
+BINARY="ahnara"
 INSTALL_DIR="/usr/local/bin"
 
 detect_platform() {
@@ -144,7 +144,7 @@ with sync_playwright() as p:
     fi
 
 
-    local HELPER_DIR="/usr/local/share/auxloclaw"
+    local HELPER_DIR="/usr/local/share/ahnara"
 
     # Install faster-whisper (local audio transcription)
     if ! python3 -c "import faster_whisper" 2>/dev/null; then
@@ -185,7 +185,7 @@ raise SystemExit(1)
     if [ ! -f "$TRANSCRIBE_SCRIPT" ]; then
         echo "Deploying transcribe helper script..."
         mkdir -p "$HELPER_DIR"
-        curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/scripts/transcribe.py" \
+        curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/transcribe.py" \
             -o "$TRANSCRIBE_SCRIPT" \
             && chmod +x "$TRANSCRIBE_SCRIPT" \
             || echo "Warning: Failed to download transcribe helper script"
@@ -196,24 +196,24 @@ raise SystemExit(1)
     if [ ! -f "$HELPER_PATH" ]; then
         echo "Deploying stealth_fetch helper script..."
         mkdir -p "$HELPER_DIR"
-        curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/scripts/stealth_fetch_helper.py" \
+        curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/stealth_fetch_helper.py" \
             -o "$HELPER_PATH" \
             && chmod +x "$HELPER_PATH" \
             || echo "Warning: Failed to download stealth_fetch helper script"
     fi
 
     # Deploy watchdog script (auto-restarts gateway if it crashes)
-    local WATCHDOG_BIN="/usr/local/bin/auxloclaw_watchdog.sh"
+    local WATCHDOG_BIN="/usr/local/bin/ahnara_watchdog.sh"
     echo "Deploying watchdog script..."
-    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/scripts/auxloclaw_watchdog.sh" \
+    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/ahnara_watchdog.sh" \
         -o "$WATCHDOG_BIN" \
         && chmod +x "$WATCHDOG_BIN" \
         || echo "Warning: Failed to deploy watchdog script"
 
     # Deploy self-healing entrypoint (auto-reinstalls binary on container reset)
-    local ENTRYPOINT_BIN="/usr/local/bin/auxloclaw_entrypoint.sh"
+    local ENTRYPOINT_BIN="/usr/local/bin/ahnara_entrypoint.sh"
     echo "Deploying self-healing entrypoint..."
-    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/scripts/auxloclaw_entrypoint.sh" \
+    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/ahnara_entrypoint.sh" \
         -o "$ENTRYPOINT_BIN" \
         && chmod +x "$ENTRYPOINT_BIN" \
         || echo "Warning: Failed to deploy entrypoint script"
@@ -227,33 +227,33 @@ raise SystemExit(1)
     # no idea what to run next. Spell it out.
     cat <<'EOF'
 
-✓ auxloclaw is ready.
+✓ ahnara is ready.
 
   3 steps to your first chat (about 2 minutes):
 
-    1.  auxloclaw setup
+    1.  ahnara setup
         (Interactive wizard -- pick a provider, paste your API key)
 
-    2.  auxloclaw gateway
+    2.  ahnara gateway
         (Start the server in the background; prints when ready)
 
-    3.  auxloclaw chat "hello"
+    3.  ahnara chat "hello"
         (Talk to the agent from your terminal)
 
   Or chat immediately with the free default provider (no setup needed):
 
     export NVIDIA_API_KEY=your-key-from-build.nvidia.com
-    auxloclaw setup --provider nvidia --api-key "$NVIDIA_API_KEY"
-    auxloclaw chat "hello"
+    ahnara setup --provider nvidia --api-key "$NVIDIA_API_KEY"
+    ahnara chat "hello"
 
   Connect Telegram:
     - Open Telegram, message @BotFather, send /newbot, copy the token
-    - Run: auxloclaw token set TELEGRAM_BOT_TOKEN <your-token>
-    - Restart: auxloclaw gateway
+    - Run: ahnara token set TELEGRAM_BOT_TOKEN <your-token>
+    - Restart: ahnara gateway
     - Send /start to your new bot
 
-  Docs: https://github.com/Auxlo-xyz/auxloclaw
-  Report issues: https://github.com/Auxlo-xyz/auxloclaw/issues
+  Docs: https://github.com/Auxlo-xyz/ahnara
+  Report issues: https://github.com/Auxlo-xyz/ahnara/issues
 
 EOF
 }

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Default workspace root for coding sessions
-const CODE_WORKSPACE_ROOT: &str = "~/.auxloclaw/code-workspaces";
+const CODE_WORKSPACE_ROOT: &str = "~/.ahnara/code-workspaces";
 
 /// Session ID prefix for coding sessions (isolates from normal chat)
 const CODE_SESSION_PREFIX: &str = "code";
@@ -174,7 +174,7 @@ When a user asks about adding API keys, tokens, or credentials:
 - Direct them to use the `/token` command: `/token set <server> <KEY> <value>`
 - Example: `/token set github GITHUB_PERSONAL_ACCESS_TOKEN ghp_xxxx`
 - If a user pastes a token in chat, warn them it was auto-deleted for security and show the `/token` command instead
-- You are AUXLOCLAW. You run on the user's own server. Tokens are managed via `/token`, not third-party app configs.
+- You are AHNARA. You run on the user's own server. Tokens are managed via `/token`, not third-party app configs.
 
 "#,
         workspace = workspace_str,
@@ -275,10 +275,10 @@ pub async fn handle_code(
 
     // Load config and override persona with coding agent instructions
     let config_path = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/config.toml"))
+        .map(|h| h.join(".ahnara/config.toml"))
         .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
     let mut config = crate::config::AppConfig::load(
-        config_path.to_str().unwrap_or("~/.auxloclaw/config.toml"),
+        config_path.to_str().unwrap_or("~/.ahnara/config.toml"),
     )?;
 
     let code_prompt = build_code_system_prompt(&workspace);
@@ -313,7 +313,7 @@ pub async fn handle_code(
     };
     let data_dir = std::path::Path::new(&session_db).parent()
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw"));
+        .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara"));
     let model_store = Arc::new(crate::memory::model_store::ModelStore::new(&data_dir)?);
     let code_mode = Arc::new(crate::memory::CodeModeStore::new(
         &config.memory.database_path
@@ -413,7 +413,7 @@ mod tests {
 
     #[test]
     fn test_ensure_workspace_creates_dir() {
-        let tmp = std::env::temp_dir().join("auxloclaw-test-workspace");
+        let tmp = std::env::temp_dir().join("ahnara-test-workspace");
         let session_id = "test-session-001";
         let workspace = tmp.join(session_id);
         std::fs::create_dir_all(&workspace).unwrap();
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_init_workspace_creates_files() {
-        let tmp = std::env::temp_dir().join("auxloclaw-test-init");
+        let tmp = std::env::temp_dir().join("ahnara-test-init");
         std::fs::create_dir_all(&tmp).unwrap();
         init_workspace(&tmp).unwrap();
         assert!(tmp.join(".env.example").exists());
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn test_scan_workspace_skips_hidden() {
-        let tmp = std::env::temp_dir().join("auxloclaw-test-scan");
+        let tmp = std::env::temp_dir().join("ahnara-test-scan");
         std::fs::create_dir_all(&tmp).unwrap();
         std::fs::write(tmp.join("main.rs"), "fn main() {}").unwrap();
         std::fs::write(tmp.join(".secret"), "hidden").unwrap();

@@ -187,7 +187,7 @@ impl AgentCore {
         let data_dir = PathBuf::from(shellexpand::tilde(&config.memory.database_path).into_owned())
             .parent()
             .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| PathBuf::from("~/.auxloclaw"));
+            .unwrap_or_else(|| PathBuf::from("~/.ahnara"));
 
         let compactor = {
             let c = Compactor::new(config.memory.clone(), data_dir.clone());
@@ -650,7 +650,7 @@ impl AgentCore {
                     if msg.contains("No active provider") {
                         tracing::error!("No active provider configured");
                         final_response = "I can't respond right now because no AI provider is configured. \
-                            Please run `auxloclaw setup` to configure a provider, or set one up in ~/.auxloclaw/config.toml".into();
+                            Please run `ahnara setup` to configure a provider, or set one up in ~/.ahnara/config.toml".into();
                     } else {
                         tracing::error!("Provider error: {}", e);
                         final_response = format!("Error: {}", e);

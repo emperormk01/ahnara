@@ -8,9 +8,9 @@ use crate::orchestrator::ToolOrchestrator;
 
 pub async fn handle_capabilities(json: bool) -> Result<()> {
     let config_path = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/config.toml"))
-        .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw/config.toml"));
-    let config = AppConfig::load(config_path.to_str().unwrap_or("~/.auxloclaw/config.toml"))
+        .map(|h| h.join(".ahnara/config.toml"))
+        .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara/config.toml"));
+    let config = AppConfig::load(config_path.to_str().unwrap_or("~/.ahnara/config.toml"))
         .unwrap_or_default();
     let orchestrator = ToolOrchestrator::new();
     let manifest = CapabilityManifest::new(&config, Some(&orchestrator));

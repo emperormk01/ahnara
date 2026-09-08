@@ -5,13 +5,13 @@ use std::fs;
 
 pub fn handle_config(action: crate::cli::ConfigCommands) -> Result<()> {
     let config_path = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/config.toml"))
+        .map(|h| h.join(".ahnara/config.toml"))
         .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
     
     match action {
         crate::cli::ConfigCommands::Show { format } => {
             if !config_path.exists() {
-                bail!("Config file not found. Run `auxloclaw setup` first.");
+                bail!("Config file not found. Run `ahnara setup` first.");
             }
             
             let content = fs::read_to_string(&config_path)?;
@@ -28,7 +28,7 @@ pub fn handle_config(action: crate::cli::ConfigCommands) -> Result<()> {
         
         crate::cli::ConfigCommands::Get { key } => {
             if !config_path.exists() {
-                bail!("Config file not found. Run `auxloclaw setup` first.");
+                bail!("Config file not found. Run `ahnara setup` first.");
             }
             
             let content = fs::read_to_string(&config_path)?;
@@ -58,7 +58,7 @@ pub fn handle_config(action: crate::cli::ConfigCommands) -> Result<()> {
         
         crate::cli::ConfigCommands::Set { key, value } => {
             if !config_path.exists() {
-                bail!("Config file not found. Run `auxloclaw setup` first.");
+                bail!("Config file not found. Run `ahnara setup` first.");
             }
             
             let content = fs::read_to_string(&config_path)?;
@@ -179,12 +179,12 @@ pub fn handle_config(action: crate::cli::ConfigCommands) -> Result<()> {
             if config_path.exists() {
                 fs::remove_file(&config_path)?;
             }
-            println!("Configuration reset. Run `auxloclaw setup` to configure.");
+            println!("Configuration reset. Run `ahnara setup` to configure.");
         }
         
         crate::cli::ConfigCommands::Validate => {
             if !config_path.exists() {
-                bail!("Config file not found. Run `auxloclaw setup` first.");
+                bail!("Config file not found. Run `ahnara setup` first.");
             }
             
             let content = fs::read_to_string(&config_path)?;

@@ -460,7 +460,7 @@ mod tests {
 
     fn make_test_manager() -> SchedulerManager {
         let log: ScheduleRunLog = Arc::new(RwLock::new(HashMap::new()));
-        SchedulerManager::new(log, "/tmp/auxloclaw-test-scheduler.toml".to_string())
+        SchedulerManager::new(log, "/tmp/ahnara-test-scheduler.toml".to_string())
     }
 
     #[test]

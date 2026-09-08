@@ -100,7 +100,7 @@ Disconnect from WhatsApp.
 
 ## WhatsApp Bot Integration
 
-To integrate with AUXLOCLAW agent:
+To integrate with ahnara agent:
 
 ```typescript
 import { WhatsAppIntegration } from "./src/index";

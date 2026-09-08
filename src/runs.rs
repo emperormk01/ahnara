@@ -47,7 +47,7 @@ impl RunDatabase {
     pub fn default_path() -> PathBuf {
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join(".auxloclaw")
+            .join(".ahnara")
             .join("runs.db")
     }
 
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn records_run_lifecycle() {
-        let path = std::env::temp_dir().join(format!("auxloclaw-runs-{}.db", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("ahnara-runs-{}.db", uuid::Uuid::new_v4()));
         let db = RunDatabase::open(&path).unwrap();
         let run_id = db
             .start_run("plan", "test goal", serde_json::json!({"a": 1}))

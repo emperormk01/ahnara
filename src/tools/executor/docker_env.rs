@@ -75,7 +75,7 @@ impl DockerEnvironment {
             anyhow::bail!("Docker daemon is not responding. Ensure Docker is running.");
         }
 
-        let container_name = format!("auxloclaw-{}", &Uuid::new_v4().to_string()[..8]);
+        let container_name = format!("ahnara-{}", &Uuid::new_v4().to_string()[..8]);
 
         Ok(Self {
             config,
@@ -168,7 +168,7 @@ impl DockerEnvironment {
     /// Locate the docker (or podman) CLI binary.
     fn find_docker() -> Option<String> {
         // Check env override first
-        if let Ok(exe) = std::env::var("AUXLOCLAW_DOCKER_BINARY") {
+        if let Ok(exe) = std::env::var("AHNARA_DOCKER_BINARY") {
             if std::path::Path::new(&exe).is_file() {
                 return Some(exe);
             }

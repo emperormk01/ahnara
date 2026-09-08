@@ -59,7 +59,7 @@ pub fn spill_tool_output(output: &str, max_chars: usize, tool_name: &str) -> Str
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
         .collect();
     let filename = format!("{}_{}.log", tool_name_clean, nanos);
-    let dir = shellexpand::tilde("~/.auxloclaw/tool_output");
+    let dir = shellexpand::tilde("~/.ahnara/tool_output");
     let dir_path = Path::new(dir.as_ref());
     if let Err(e) = fs::create_dir_all(dir_path) {
         tracing::warn!("Failed to create tool output spill directory: {}", e);
@@ -98,7 +98,7 @@ pub fn summarize_older_history(history: &[HistoryMessage]) -> Option<String> {
     }
 
     Some(format!(
-        "Earlier conversation summary, compressed by AUXLOCLAW to save context tokens. Original older message count: {}. Most recent older items:\n{}",
+        "Earlier conversation summary, compressed by AHNARA to save context tokens. Original older message count: {}. Most recent older items:\n{}",
         total,
         lines.join("\n")
     ))
@@ -332,7 +332,7 @@ mod tests {
         assert!(large_result.contains("tool_output"));
 
         // 3) A spill file was created with full content
-        let dir = shellexpand::tilde("~/.auxloclaw/tool_output");
+        let dir = shellexpand::tilde("~/.ahnara/tool_output");
         let dir_path = Path::new(dir.as_ref());
         let entries: Vec<_> = fs::read_dir(dir_path)
             .into_iter()

@@ -1,8 +1,8 @@
-# AUXLOCLAW Configuration Template
-# Copy to ~/.auxloclaw/config.toml and fill in your API keys
+# ahnara Configuration Template
+# Copy to ~/.ahnara/config.toml and fill in your API keys
 
 [agent]
-name = "AUXLOCLAW"
+name = "ahnara"
 default_model = "stepfun-ai/step-3.5-flash"
 max_tokens = 8192
 temperature = 1.0
@@ -36,7 +36,7 @@ api_key = ""  # Set via NVIDIA_API_KEY env var or fill here
 # api_key = ""  # Set via GOOGLE_AI_STUDIO_KEY env var
 
 [memory]
-database_path = "~/.auxloclaw/memory.db"
+database_path = "~/.ahnara/memory.db"
 hot_cache_size = 1000
 session_max_messages = 100
 consolidation_interval_secs = 300

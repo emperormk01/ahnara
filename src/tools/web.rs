@@ -566,7 +566,7 @@ impl Tool for XFetchTool {
         };
         
         let client = reqwest::Client::builder()
-            .user_agent("Mozilla/5.0 (compatible; AUXLOCLAW/0.1)")
+            .user_agent("Mozilla/5.0 (compatible; AHNARA/0.1)")
             .build()?;
         
         let resp = client.get(&url).send().await?;

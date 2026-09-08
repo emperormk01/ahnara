@@ -1,4 +1,4 @@
-# AUXLOCLAW vs Hermes Agent vs Nanobot - Complete Comparison
+# ahnara vs Hermes Agent vs Nanobot - Complete Comparison
 
 ## Research Summary
 
@@ -58,11 +58,11 @@ fallback_for_toolsets: [web]
 
 ---
 
-## AUXLOCLAW Implementation Status
+## ahnara Implementation Status
 
-### What AUXLOCLAW Has (Hermes Matched or Exceeded)
+### What ahnara Has (Hermes Matched or Exceeded)
 
-| Feature | Hermes | AUXLOCLAW |
+| Feature | Hermes | ahnara |
 |---------|--------|-----------|
 | **Startup Time** | 5-10s | **12ms** (800x faster) |
 | **Memory Footprint** | 200-500MB | **<20MB** (10-25x smaller) |
@@ -80,7 +80,7 @@ fallback_for_toolsets: [web]
 | **Skill Evolution (DSPy)** | ✅ | ❌ Not yet |
 | **MCP Support** | Partial | ❌ Not yet |
 
-### What AUXLOCLAW Has (Unique Advantages)
+### What ahnara Has (Unique Advantages)
 
 | Feature | Benefit |
 |---------|---------|
@@ -94,7 +94,7 @@ fallback_for_toolsets: [web]
 
 ## Tool Assignment System
 
-### How Tools Are Assigned in AUXLOCLAW
+### How Tools Are Assigned in ahnara
 
 ```rust
 // 1. Tools are registered with the orchestrator
@@ -116,7 +116,7 @@ fallback_for_tools: [web-search]
 dag.build(calls) -> levels -> parallel_execute()
 ```
 
-### Available Tools in AUXLOCLAW
+### Available Tools in ahnara
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
@@ -145,7 +145,7 @@ let installer = SkillInstaller::new(registry);
 installer.install_from_prompt("analyze PDFs").await?;
 
 // Creates skill:
-// ~/.auxloclaw/skills/analyze-pdfs/SKILL.md
+// ~/.ahnara/skills/analyze-pdfs/SKILL.md
 ```
 
 ### Self-Improvement Loop
@@ -173,7 +173,7 @@ let improved = learning.improve().await?;
 
 ---
 
-## What Hermes Has That AUXLOCLAW Doesn't (Yet)
+## What Hermes Has That ahnara Doesn't (Yet)
 
 1. **HermesHub Skill Registry** - Community skill sharing platform
 2. **Plugin Lifecycle Hooks** - on_startup, on_shutdown, on_message
@@ -186,10 +186,10 @@ let improved = learning.improve().await?;
 
 ---
 
-## Next Steps for AUXLOCLAW
+## Next Steps for ahnara
 
 1. **Add HermesHub-compatible registry endpoint**
 2. **Implement MCP server mode**
-3. **Port more Hermes skills to AUXLOCLAW format**
+3. **Port more Hermes skills to ahnara format**
 4. **Add scheduled automations**
 5. **Implement plugin lifecycle hooks**

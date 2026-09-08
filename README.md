@@ -1,4 +1,4 @@
-# AUXLOCLAW
+# ahnara
 
 **Ultra-High-Performance AI Agent Framework**
 
@@ -10,7 +10,7 @@
 
 ## Introduction
 
-AUXLOCLAW is a high-performance, Rust-native AI agent framework designed for building intelligent, autonomous systems that can plan, execute, and interact across multiple channels. It combines zero-cost abstractions, parallel tool execution, and multi-provider support to deliver real-time responses with minimal latency.
+ahnara is a high-performance, Rust-native AI agent framework designed for building intelligent, autonomous systems that can plan, execute, and interact across multiple channels. It combines zero-cost abstractions, parallel tool execution, and multi-provider support to deliver real-time responses with minimal latency.
 
 Key architectural choices include:
 
@@ -33,7 +33,7 @@ Key architectural choices include:
 
 ## Concepts You'll Need
 
-AUXLOCLAW operates on a core mental model where the agent:
+ahnara operates on a core mental model where the agent:
 
 **Planning and execution.** The agent uses a structured DAG (Directed Acyclic Graph) to plan tasks, breaking down goals into actionable steps. It executes tools in parallel when possible to maximize efficiency.
 
@@ -50,14 +50,14 @@ AUXLOCLAW operates on a core mental model where the agent:
 ### 1. Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/get.sh | bash
 ```
 
 Downloads a pre-built static binary for your platform (Linux or macOS, x86_64 or aarch64). No Rust required.
 
 ### 2. Configure a provider
 
-AUXLOCLAW works with any OpenAI-compatible endpoint. Pick one:
+ahnara works with any OpenAI-compatible endpoint. Pick one:
 
 **NVIDIA NIM (free tier available at build.nvidia.com):**
 ```bash
@@ -72,14 +72,14 @@ export OPENROUTER_API_KEY="sk-or-v1-..."
 **Any custom endpoint:**
 ```bash
 export OPENAI_API_KEY="your-key"
-# Then edit ~/.auxloclaw/config.toml and set:
+# Then edit ~/.ahnara/config.toml and set:
 # api_base = "https://your-endpoint/v1"
 ```
 
 ### 3. First chat
 
 ```bash
-auxloclaw chat "What's the capital of France?"
+ahnara chat "What's the capital of France?"
 ```
 
 The agent responds immediately. Each message stays in a session -- quit and restart, the conversation continues.
@@ -87,10 +87,10 @@ The agent responds immediately. Each message stays in a session -- quit and rest
 ### 4. Start the gateway (persistent agent)
 
 ```bash
-auxloclaw gateway
+ahnara gateway
 ```
 
-This starts AUXLOCLAW as a server on port 18789. From here you can:
+This starts ahnara as a server on port 18789. From here you can:
 - Connect Telegram/Discord bots
 - Call the HTTP API from other apps
 - Run scheduled cron jobs
@@ -99,18 +99,18 @@ This starts AUXLOCLAW as a server on port 18789. From here you can:
 ### 5. Connect Telegram (optional, 2 minutes)
 
 ```toml
-# Add to ~/.auxloclaw/config.toml:
+# Add to ~/.ahnara/config.toml:
 [channels.telegram]
 enabled = true
 # Set token via env var: export TELEGRAM_BOT_TOKEN="..."
 ```
 
-Create a bot via [@BotFather](https://t.me/BotFather), paste the token, restart the gateway. Message your bot and AUXLOCLAW responds.
+Create a bot via [@BotFather](https://t.me/BotFather), paste the token, restart the gateway. Message your bot and ahnara responds.
 
 ### What next?
 
-- `auxloclaw skill search <keyword>` -- install community skills (web scrapers, automation workflows)
-- `auxloclaw code "fix the login bug"` -- spawn an isolated coding agent with its own workspace
+- `ahnara skill search <keyword>` -- install community skills (web scrapers, automation workflows)
+- `ahnara code "fix the login bug"` -- spawn an isolated coding agent with its own workspace
 - `/model list` in chat -- switch to any model mid-conversation
 
 ---
@@ -140,11 +140,11 @@ The commands you'll actually use day to day:
 
 ```bash
 # Check system status
-auxloclaw status
+ahnara status
 
 # Install a skill from the registry
-auxloclaw skill search stock
-auxloclaw skill install stock-analyzer
+ahnara skill search stock
+ahnara skill install stock-analyzer
 
 # Switch model mid-session
 /model list          # in chat
@@ -157,23 +157,23 @@ auxloclaw skill install stock-analyzer
 
 | Command | Description |
 | --- | --- |
-| `auxloclaw gateway` | Start the gateway server (default port 18789) |
-| `auxloclaw chat [message]` | Chat with the agent (interactive REPL or one-shot) |
-| `auxloclaw setup` | Interactive setup wizard |
-| `auxloclaw status` | Show system status |
-| `auxloclaw code [task]` | Start a coding session in an isolated workspace |
-| `auxloclaw model [id]` | Override model/provider settings for your session |
-| `auxloclaw skill <sub>` | Manage skills (list, view, create, install, search, browse) |
-| `auxloclaw provider <sub>` | Manage providers (list, test) |
-| `auxloclaw persona <sub>` | Manage persona (show, set, list) |
-| `auxloclaw config <sub>` | Manage configuration (show, set, get, edit) |
-| `auxloclaw mcp <sub>` | Manage MCP servers (list, add, remove, enable, disable, tools) |
-| `auxloclaw capabilities` | Show runtime capability manifest |
-| `auxloclaw plan <goal>` | Create a structured task plan from a goal |
-| `auxloclaw run-plan <file>` | Execute a structured task plan DAG |
-| `auxloclaw runs <sub>` | Inspect persistent run history (list, show, export) |
-| `auxloclaw run <skill>` | Run a skill |
-| `auxloclaw update` | Self-update to latest version |
+| `ahnara gateway` | Start the gateway server (default port 18789) |
+| `ahnara chat [message]` | Chat with the agent (interactive REPL or one-shot) |
+| `ahnara setup` | Interactive setup wizard |
+| `ahnara status` | Show system status |
+| `ahnara code [task]` | Start a coding session in an isolated workspace |
+| `ahnara model [id]` | Override model/provider settings for your session |
+| `ahnara skill <sub>` | Manage skills (list, view, create, install, search, browse) |
+| `ahnara provider <sub>` | Manage providers (list, test) |
+| `ahnara persona <sub>` | Manage persona (show, set, list) |
+| `ahnara config <sub>` | Manage configuration (show, set, get, edit) |
+| `ahnara mcp <sub>` | Manage MCP servers (list, add, remove, enable, disable, tools) |
+| `ahnara capabilities` | Show runtime capability manifest |
+| `ahnara plan <goal>` | Create a structured task plan from a goal |
+| `ahnara run-plan <file>` | Execute a structured task plan DAG |
+| `ahnara runs <sub>` | Inspect persistent run history (list, show, export) |
+| `ahnara run <skill>` | Run a skill |
+| `ahnara update` | Self-update to latest version |
 
 ### In-Chat Commands
 
@@ -194,15 +194,15 @@ All commands work in Telegram, Discord, and CLI.
 ## Gateway API
 
 ```bash
-auxloclaw gateway --port 8080
+ahnara gateway --port 8080
 ```
 
-**Authentication**: Off by default. Set `AUXLOCLAW_REQUIRE_AUTH=true` and `AUXLOCLAW_API_KEY=<secret>` to require bearer auth on all routes except `/health`.
+**Authentication**: Off by default. Set `ahnara_REQUIRE_AUTH=true` and `ahnara_API_KEY=<secret>` to require bearer auth on all routes except `/health`.
 
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/health` | GET | Health check |
-| `/chat` | POST | Chat with AUXLOCLAW |
+| `/chat` | POST | Chat with ahnara |
 | `/stream` | POST | Streaming chat (SSE) |
 | `/skills` | GET | List installed skills |
 | `/tools` | GET | List available tools |
@@ -215,11 +215,11 @@ auxloclaw gateway --port 8080
 
 ## Configuration
 
-Config file: `file ~/.auxloclaw/config.toml`
+Config file: `file ~/.ahnara/config.toml`
 
 ```toml
 [agent]
-name = "AUXLOCLAW"
+name = "ahnara"
 default_model = "stepfun-ai/step-3.5-flash"
 temperature = 1.0
 max_tokens = 8192
@@ -233,7 +233,7 @@ api_base = "https://integrate.api.nvidia.com/v1"
 # api_key via NVIDIA_API_KEY env var
 
 [memory]
-database_path = "~/.auxloclaw/memory.db"
+database_path = "~/.ahnara/memory.db"
 hot_cache_size = 1000
 
 [channels.telegram]
@@ -259,8 +259,8 @@ port = 18789
 | `GROQ_API_KEY` | Groq API key |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `DISCORD_BOT_TOKEN` | Discord bot token |
-| `AUXLOCLAW_REQUIRE_AUTH` | Require bearer auth on API routes |
-| `AUXLOCLAW_API_KEY` | API key for bearer auth |
+| `ahnara_REQUIRE_AUTH` | Require bearer auth on API routes |
+| `ahnara_API_KEY` | API key for bearer auth |
 
 ---
 
@@ -298,11 +298,11 @@ timeout_secs = 30
 Merge skills from multiple registry manifests. The official Auxlo registry is enabled by default.
 
 ```bash
-auxloclaw skill tap list
-auxloclaw skill tap add community https://example.com/manifest.json --priority 10
-auxloclaw skill tap add pinned https://example.com/manifest.json --sha256 <hash>
-auxloclaw skill search debugging
-auxloclaw skill browse
+ahnara skill tap list
+ahnara skill tap add community https://example.com/manifest.json --priority 10
+ahnara skill tap add pinned https://example.com/manifest.json --sha256 <hash>
+ahnara skill search debugging
+ahnara skill browse
 ```
 
 ---
@@ -356,17 +356,17 @@ Cron expressions use six-field seconds format: `sec min hour day month weekday`.
 Structured task planning with auditable execution.
 
 ```bash
-auxloclaw plan "Fix failing auth tests" --output auth-plan.json
-auxloclaw run-plan auth-plan.json
-auxloclaw runs list
-auxloclaw runs show <run-id>
+ahnara plan "Fix failing auth tests" --output auth-plan.json
+ahnara run-plan auth-plan.json
+ahnara runs list
+ahnara runs show <run-id>
 ```
 
 ---
 
 ## Tool Approval Policy
 
-- `AUXLOCLAW_APPROVAL_MODE=smart|manual|off` (default: `smart`)
+- `ahnara_APPROVAL_MODE=smart|manual|off` (default: `smart`)
 - Smart mode blocks critical destructive patterns, requires approval for high-risk shell/network commands, and blocks private/local URLs to reduce SSRF risk.
 
 ---
@@ -465,7 +465,7 @@ Fixed in v0.4.7. This occurred when conversation compaction inserted a mid-conve
 
 ### API key not found
 
-AUXLOCLAW checks environment variables in order:
+ahnara checks environment variables in order:
 
 ---
 

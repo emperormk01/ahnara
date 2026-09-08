@@ -112,7 +112,7 @@ impl McpClient {
                     "protocolVersion": MCP_PROTOCOL_VERSION,
                     "capabilities": {},
                     "clientInfo": {
-                        "name": "auxloclaw",
+                        "name": "ahnara",
                         "version": env!("CARGO_PKG_VERSION")
                     }
                 }),

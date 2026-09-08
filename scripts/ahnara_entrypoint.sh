@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Self-healing entrypoint for auxloclaw.
+# Self-healing entrypoint for ahnara.
 #
 # Solves TWO problems on container runtime resets:
-#   1. Binary at /usr/local/bin/auxloclaw gets wiped -> auto-reinstall
-#   2. User data at ~/.auxloclaw gets wiped           -> auto-persist via symlink
+#   1. Binary at /usr/local/bin/ahnara gets wiped -> auto-reinstall
+#   2. User data at ~/.ahnara gets wiped           -> auto-persist via symlink
 #
 # Zero-config: detects persistent storage automatically.
 # Works on Zo, Docker, K8s, bare metal -- any container runtime.
 
-REPO="Auxlo-xyz/auxloclaw"
-BINARY="auxloclaw"
+REPO="Auxlo-xyz/ahnara"
+BINARY="ahnara"
 INSTALL_DIR="/usr/local/bin"
 INSTALL_PATH="${INSTALL_DIR}/${BINARY}"
-LOCKFILE="/tmp/auxloclaw_entrypoint.lock"
+LOCKFILE="/tmp/ahnara_entrypoint.lock"
 
 log() {
-    printf '[auxloclaw] %s %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
+    printf '[ahnara] %s %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
 }
 
 # ── Binary recovery ──────────────────────────────────────────────────────────
@@ -77,29 +77,29 @@ ensure_binary() {
 
 # ── Data persistence ─────────────────────────────────────────────────────────
 #
-# On container reset, ~/.auxloclaw (config, memory DB, reflections, tokens,
+# On container reset, ~/.ahnara (config, memory DB, reflections, tokens,
 # sessions) is wiped if it lives on the ephemeral root filesystem.
 #
-# Fix: symlink ~/.auxloclaw to a directory on the first persistent mount we
-# find.  The binary keeps writing to ~/.auxloclaw -- it doesn't know or care
+# Fix: symlink ~/.ahnara to a directory on the first persistent mount we
+# find.  The binary keeps writing to ~/.ahnara -- it doesn't know or care
 # that it's a symlink.  No code changes needed in the Rust binary.
 #
 # Detection order:
-#   1. AUXLOCLAW_HOME env var (explicit user override -- highest priority)
+#   1. ahnara_HOME env var (explicit user override -- highest priority)
 #   2. Already a symlink?  User configured it themselves -- leave it alone.
 #   3. Probe well-known persistent mount points:
 #        /home/workspace  (Zo Computer)
 #        /data            (Docker convention)
 #        /mnt/data        (K8s PVC common)
-#        /srv/auxloclaw   (FHS-compliant)
+#        /srv/ahnara   (FHS-compliant)
 #        /persistent      (generic)
 #      First one that is writable AND on a different device than / wins.
-#   4. Fall back to $HOME/.auxloclaw as-is (bare metal, persistent home).
+#   4. Fall back to $HOME/.ahnara as-is (bare metal, persistent home).
 
 find_persistent_root() {
-    # If user explicitly set AUXLOCLAW_HOME, we still symlink but to that target.
+    # If user explicitly set ahnara_HOME, we still symlink but to that target.
     # However if they set it, they likely manage persistence themselves -- skip.
-    if [ -n "${AUXLOCLAW_HOME:-}" ]; then
+    if [ -n "${ahnara_HOME:-}" ]; then
         echo ""
         return
     fi
@@ -107,7 +107,7 @@ find_persistent_root() {
     local root_dev
     root_dev="$(stat -c %d / 2>/dev/null || echo 0)"
 
-    local candidates="/home/workspace /data /mnt/data /srv/auxloclaw /persistent"
+    local candidates="/home/workspace /data /mnt/data /srv/ahnara /persistent"
     for mount in $candidates; do
         [ -d "$mount" ] || continue
         # Check it's writable
@@ -135,20 +135,20 @@ find_persistent_root() {
 }
 
 persist_data_dir() {
-    local home_auxlo="${HOME}/.auxloclaw"
+    local home_auxlo="${HOME}/.ahnara"
 
     # Explicit override: user manages their own persistence
-    if [ -n "${AUXLOCLAW_HOME:-}" ]; then
-        mkdir -p "$AUXLOCLAW_HOME"
+    if [ -n "${ahnara_HOME:-}" ]; then
+        mkdir -p "$ahnara_HOME"
         if [ ! -e "$home_auxlo" ]; then
-            ln -sfn "$AUXLOCLAW_HOME" "$home_auxlo"
-            log "Data dir: ${AUXLOCLAW_HOME} (AUXLOCLAW_HOME)"
+            ln -sfn "$ahnara_HOME" "$home_auxlo"
+            log "Data dir: ${ahnara_HOME} (ahnara_HOME)"
         elif [ -d "$home_auxlo" ] && [ ! -L "$home_auxlo" ]; then
             # Migrate existing data into the user-specified location
-            cp -an "$home_auxlo"/. "$AUXLOCLAW_HOME"/ 2>/dev/null || true
+            cp -an "$home_auxlo"/. "$ahnara_HOME"/ 2>/dev/null || true
             rm -rf "$home_auxlo"
-            ln -sfn "$AUXLOCLAW_HOME" "$home_auxlo"
-            log "Migrated data -> ${AUXLOCLAW_HOME} (AUXLOCLAW_HOME)"
+            ln -sfn "$ahnara_HOME" "$home_auxlo"
+            log "Migrated data -> ${ahnara_HOME} (ahnara_HOME)"
         fi
         return
     fi
@@ -163,12 +163,12 @@ persist_data_dir() {
 
     if [ -z "$persistent_root" ]; then
         # No persistent mount found -- bare metal or simple container.
-        # ~/.auxloclaw is on the root fs which is presumably persistent.
+        # ~/.ahnara is on the root fs which is presumably persistent.
         mkdir -p "$home_auxlo"
         return
     fi
 
-    local data_target="${persistent_root}/.auxloclaw-data"
+    local data_target="${persistent_root}/.ahnara-data"
 
     if [ -d "$home_auxlo" ] && [ ! -L "$home_auxlo" ]; then
         # Existing data on ephemeral fs -- migrate to persistent storage

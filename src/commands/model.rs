@@ -447,7 +447,7 @@ pub fn resolve_user_model(
     }
 }
 
-/// Sync the user's current model override into ~/.auxloclaw/config.toml
+/// Sync the user's current model override into ~/.ahnara/config.toml
 /// as the single global provider. This is the ONLY place provider config lives.
 /// After this call, a restart will pick up the new provider automatically,
 /// and for the current session the ProviderPool is updated at runtime.
@@ -462,7 +462,7 @@ pub fn update_config_provider(
     };
 
     let config_path = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/config.toml"))
+        .map(|h| h.join(".ahnara/config.toml"))
         .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
 
     // Read existing config or start fresh
@@ -577,7 +577,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("auxloclaw_cmd_test_{}", ts));
+        let dir = std::env::temp_dir().join(format!("ahnara_cmd_test_{}", ts));
         fs::create_dir_all(&dir).unwrap();
         ModelStore::new(&dir).unwrap()
     }

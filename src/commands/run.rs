@@ -5,7 +5,7 @@ use std::fs;
 
 pub async fn handle_run(skill: String, args: Vec<String>) -> Result<()> {
     let skills_dir = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/skills"))
+        .map(|h| h.join(".ahnara/skills"))
         .ok_or_else(|| anyhow::anyhow!("Could not find skills directory"))?;
     
     // Find skill

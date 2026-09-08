@@ -11,11 +11,11 @@ secrets.*
 
 # Config with API keys
 config.toml
-auxloclaw.toml
-!.auxloclaw/config.toml
+ahnara.toml
+!.ahnara/config.toml
 
 # User data
-~/.auxloclaw/
+~/.ahnara/
 *.db
 *.sqlite
 *.sqlite3

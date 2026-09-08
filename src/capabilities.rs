@@ -64,7 +64,7 @@ impl CapabilityManifest {
     pub fn prompt_summary(&self) -> String {
         let mut lines = vec![
             "Runtime capability awareness:".to_string(),
-            "You are AUXLOCLAW and can use the following enabled capabilities when relevant:"
+            "You are AHNARA and can use the following enabled capabilities when relevant:"
                 .to_string(),
         ];
 
@@ -98,7 +98,7 @@ impl CapabilityManifest {
         }
 
         let mut output = String::new();
-        output.push_str(&format!("AUXLOCLAW capabilities v{}\n", self.version));
+        output.push_str(&format!("AHNARA capabilities v{}\n", self.version));
         for (source, items) in grouped {
             output.push_str(&format!("\n{}\n", source));
             for item in items {

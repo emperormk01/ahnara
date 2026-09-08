@@ -12,7 +12,7 @@ pub enum ApprovalMode {
 
 impl ApprovalMode {
     pub fn from_env() -> Self {
-        match env::var("AUXLOCLAW_APPROVAL_MODE")
+        match env::var("AHNARA_APPROVAL_MODE")
             .unwrap_or_else(|_| "smart".to_string())
             .to_lowercase()
             .as_str()

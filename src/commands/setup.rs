@@ -20,17 +20,17 @@ pub struct NonInteractiveOptions {
 
 pub fn handle_setup(quick: bool, telegram: bool, discord: bool) -> Result<()> {
     let env_opts = NonInteractiveOptions {
-        provider: std::env::var("AUXLOCLAW_PROVIDER").ok(),
-        model: std::env::var("AUXLOCLAW_MODEL").ok(),
-        api_key: std::env::var("AUXLOCLAW_API_KEY").ok().or_else(|| {
+        provider: std::env::var("AHNARA_PROVIDER").ok(),
+        model: std::env::var("AHNARA_MODEL").ok(),
+        api_key: std::env::var("AHNARA_API_KEY").ok().or_else(|| {
             // Common fallback: NVIDIA, OpenAI, Anthropic provider-specific vars
             std::env::var("NVIDIA_API_KEY").ok()
                 .or_else(|| std::env::var("OPENAI_API_KEY").ok())
                 .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
         }),
-        telegram_token: std::env::var("AUXLOCLAW_TELEGRAM_TOKEN").ok(),
-        discord_token: std::env::var("AUXLOCLAW_DISCORD_TOKEN").ok(),
-        github_token: std::env::var("AUXLOCLAW_GITHUB_TOKEN").ok(),
+        telegram_token: std::env::var("AHNARA_TELEGRAM_TOKEN").ok(),
+        discord_token: std::env::var("AHNARA_DISCORD_TOKEN").ok(),
+        github_token: std::env::var("AHNARA_GITHUB_TOKEN").ok(),
     };
     let has_env = env_opts.provider.is_some()
         || env_opts.model.is_some()
@@ -53,10 +53,10 @@ pub fn handle_setup_with(
     discord: bool,
     non_interactive: NonInteractiveOptions,
 ) -> Result<()> {
-    println!("\nAUXLOCLAW Setup Wizard\n");
+    println!("\nAHNARA Setup Wizard\n");
 
     let config_dir = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw"))
+        .map(|h| h.join(".ahnara"))
         .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
 
     let config_path = config_dir.join("config.toml");
@@ -87,7 +87,7 @@ pub fn handle_setup_with(
     }
 
     // Interactive setup
-    println!("This wizard will help you configure AUXLOCLAW.\n");
+    println!("This wizard will help you configure AHNARA.\n");
 
     // Create config directory
     if !config_dir.exists() {
@@ -100,7 +100,7 @@ pub fn handle_setup_with(
     // Agent name
     let agent_name: String = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("Agent name")
-        .default("AUXLOCLAW".into())
+        .default("AHNARA".into())
         .interact_text()?;
     
     // Provider selection
@@ -243,7 +243,7 @@ pub fn handle_setup_with(
     // Token management
     if github_token.is_none() {
         println!("\nYou can set tokens later with:");
-        println!("  auxloclaw token set GITHUB_TOKEN <your-token>");
+        println!("  ahnara token set GITHUB_TOKEN <your-token>");
         println!("  Or use /token set GITHUB_TOKEN <your-token> in Telegram/Discord\n");
     }
     
@@ -297,7 +297,7 @@ pub fn handle_setup_with(
         println!("  Extra MCP servers: {}", extra_mcp_servers.len());
     }
     
-    println!("\nSetup complete! Run `auxloclaw gateway` to start.");
+    println!("\nSetup complete! Run `ahnara gateway` to start.");
     
     Ok(())
 }
@@ -310,7 +310,7 @@ fn quick_setup(config_dir: &PathBuf, telegram: bool, discord: bool) -> Result<()
     }
     
     let config = generate_config(
-        "AUXLOCLAW",
+        "AHNARA",
         "",
         "",
         "",
@@ -329,9 +329,9 @@ fn quick_setup(config_dir: &PathBuf, telegram: bool, discord: bool) -> Result<()
     }
 
     println!("Quick setup complete: {:?}", config_path);
-    println!("  Configure your model: auxloclaw model --provider <name> --key <api_key> <model_id>");
+    println!("  Configure your model: ahnara model --provider <name> --key <api_key> <model_id>");
     println!("  Or from Telegram/Discord: /model");
-    println!("  Run: auxloclaw gateway");
+    println!("  Run: ahnara gateway");
     
     Ok(())
 }
@@ -358,25 +358,25 @@ pub fn restrict_permissions(path: &std::path::Path) -> std::io::Result<()> {
 /// The user can pass a real key in any of three ways:
 /// 1. They typed it in the interactive wizard.
 /// 2. They passed `--api-key` on the command line.
-/// 3. They exported `AUXLOCLAW_API_KEY` in their environment.
+/// 3. They exported `AHNARA_API_KEY` in their environment.
 ///
 /// In all three cases we write the literal key into `config.toml`.
 /// If the key is empty (or matches a known placeholder string), we write
 /// the canonical placeholder so the user can search for it later and run
-/// `auxloclaw token set` to fill in the real value. This is the
+/// `ahnara token set` to fill in the real value. This is the
 /// "non-secret default" path -- the file no longer contains a blank
 /// string and it doesn't pretend the key is set.
 fn sanitize_api_key(
     key: &str,
     env_var: &str,
 ) -> String {
-    const PLACEHOLDER: &str = "<set via auxloclaw token or AUXLOCLAW_API_KEY env>";
+    const PLACEHOLDER: &str = "<set via ahnara token or AHNARA_API_KEY env>";
     if key.trim().is_empty() {
         return PLACEHOLDER.to_string();
     }
     // If the user typed the placeholder or any common no-op, treat as empty.
     let trimmed = key.trim();
-    let known_placeholders = ["<set via auxloclaw token>", "<set via env>", "<set later>", "changeme", "your-key-here", "TODO"];
+    let known_placeholders = ["<set via ahnara token>", "<set via env>", "<set later>", "changeme", "your-key-here", "TODO"];
     if known_placeholders.contains(&trimmed) {
         return PLACEHOLDER.to_string();
     }
@@ -385,7 +385,7 @@ fn sanitize_api_key(
 
 /// Return the placeholder string so callers can reference it in user-facing output.
 pub fn api_key_placeholder() -> &'static str {
-    "<set via auxloclaw token or AUXLOCLAW_API_KEY env>"
+    "<set via ahnara token or AHNARA_API_KEY env>"
 }
 
 fn generate_config(
@@ -411,16 +411,16 @@ fn generate_config(
             r#"[[providers.providers]]
 name = "{}"
 api_base = "{}"
-api_key = "{}"  # set via auxloclaw token or env var
+api_key = "{}"  # set via ahnara token or env var
 "#,
-            provider, api_base, sanitize_api_key(api_key, "AUXLOCLAW_API_KEY")
+            provider, api_base, sanitize_api_key(api_key, "AHNARA_API_KEY")
         )
     } else {
         String::new()
     };
 
     let mut config = format!(
-        r#"# AUXLOCLAW Configuration
+        r#"# AHNARA Configuration
 
 [agent]
 name = "{}"
@@ -435,7 +435,7 @@ connection_pool_size = 32
 request_timeout_secs = 120
 
 {}[memory]
-database_path = "~/.auxloclaw/memory.db"
+database_path = "~/.ahnara/memory.db"
 hot_cache_size = 1000
 session_max_messages = 100
 consolidation_interval_secs = 300
@@ -548,7 +548,7 @@ fn non_interactive_setup(
     let extra_mcp = &[];
 
     let config = generate_config(
-        "AUXLOCLAW",
+        "AHNARA",
         provider,
         api_base,
         model,
@@ -589,7 +589,7 @@ fn non_interactive_setup(
     println!("  Discord: {}", if enabled_discord { "enabled" } else { "disabled" });
     println!("  GitHub MCP: {}", if enabled_github { "enabled" } else { "disabled" });
     println!("Configuration saved to {:?}", config_path);
-    println!("Next steps: Run `auxloclaw gateway` to start.");
+    println!("Next steps: Run `ahnara gateway` to start.");
     if api_key.is_empty() {
         println!("Set your API key: export OPENAI_API_KEY=your-key");
     }
@@ -615,7 +615,7 @@ mod tests {
 
     #[test]
     fn non_interactive_setup_writes_config() {
-        let tmp = env::temp_dir().join(format!("auxloclaw-setup-{}", std::process::id()));
+        let tmp = env::temp_dir().join(format!("ahnara-setup-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         let config_path = tmp.join("config.toml");
         let opts = make_opts();
@@ -635,7 +635,7 @@ mod tests {
     fn handle_setup_with_non_interactive_opts_skips_tty() {
         // Even with stdin closed (the test harness has no TTY), passing any
         // non-interactive option must succeed without ever calling bail_non_tty.
-        let tmp = env::temp_dir().join(format!("auxloclaw-setup-no-tty-{}", std::process::id()));
+        let tmp = env::temp_dir().join(format!("ahnara-setup-no-tty-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         let config_path = tmp.join("config.toml");
 
@@ -655,7 +655,7 @@ mod tests {
     #[test]
     fn sanitize_api_key_redacts_empty_and_placeholder() {
         // Empty key becomes the canonical placeholder
-        assert!(sanitize_api_key("", "X").contains("set via auxloclaw token"));
+        assert!(sanitize_api_key("", "X").contains("set via ahnara token"));
         // Known no-op placeholders also become the canonical placeholder
         assert_eq!(sanitize_api_key("changeme", "X"), api_key_placeholder());
         assert_eq!(sanitize_api_key("TODO", "X"), api_key_placeholder());
@@ -666,7 +666,7 @@ mod tests {
 
     #[test]
     fn restrict_permissions_creates_file_with_600() {
-        let tmp = env::temp_dir().join(format!("auxloclaw-perms-{}", std::process::id()));
+        let tmp = env::temp_dir().join(format!("ahnara-perms-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
         let p = tmp.join("config.toml");
@@ -685,7 +685,7 @@ mod tests {
 
     #[test]
     fn interactive_config_does_not_contain_real_key_when_none_provided() {
-        let tmp = env::temp_dir().join(format!("auxloclaw-no-key-{}", std::process::id()));
+        let tmp = env::temp_dir().join(format!("ahnara-no-key-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         let config_path = tmp.join("config.toml");
         let opts = NonInteractiveOptions {

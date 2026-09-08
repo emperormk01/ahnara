@@ -81,7 +81,7 @@ impl Default for ExtractorConfig {
     fn default() -> Self {
         let skills_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("auxloclaw")
+            .join("ahnara")
             .join("skills");
         Self {
             enabled: true,

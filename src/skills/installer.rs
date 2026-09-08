@@ -181,7 +181,7 @@ Add your skill instructions here.
             .ok_or_else(|| anyhow::anyhow!("Invalid skills directory"))?;
 
         // Clone the repo temporarily
-        let temp_dir = std::env::temp_dir().join("auxloclaw-skill-clone");
+        let temp_dir = std::env::temp_dir().join("ahnara-skill-clone");
         let _ = std::fs::remove_dir_all(&temp_dir);
         
         let status = Command::new("git")
@@ -234,7 +234,7 @@ impl Default for SkillInstaller {
         Self::new(
             dirs::config_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
-                .join("auxloclaw")
+                .join("ahnara")
                 .join("skills")
         )
     }

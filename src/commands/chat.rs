@@ -14,10 +14,10 @@ pub async fn handle_chat(
 ) -> Result<()> {
     // Load config
     let config_path = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/config.toml"))
+        .map(|h| h.join(".ahnara/config.toml"))
         .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
     let config =
-        crate::config::AppConfig::load(config_path.to_str().unwrap_or("~/.auxloclaw/config.toml"))?;
+        crate::config::AppConfig::load(config_path.to_str().unwrap_or("~/.ahnara/config.toml"))?;
 
     // Initialize components
     let memory = Arc::new(crate::memory::MemoryEngine::new(&config.memory)?);
@@ -39,7 +39,7 @@ pub async fn handle_chat(
     };
         let data_dir = std::path::Path::new(&session_db).parent()
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw"));
+        .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara"));
     let model_store = Arc::new(crate::memory::model_store::ModelStore::new(&data_dir)?);
     let code_mode = Arc::new(crate::memory::CodeModeStore::new(
             &config.memory.database_path
@@ -74,7 +74,7 @@ pub async fn handle_chat(
                     "Interactive mode requires a terminal. Please run this command in a terminal or redirect stdin/stdout to a terminal."
                 ));
             }
-            println!("\n🦞 AUXLOCLAW Chat (type 'exit' to quit, 'help' for commands)\n");
+            println!("\n🦞 AHNARA Chat (type 'exit' to quit, 'help' for commands)\n");
 
             let mut history = dialoguer::BasicHistory::new();
 

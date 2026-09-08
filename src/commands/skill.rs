@@ -9,7 +9,7 @@ use crate::skills::{registry::SkillRegistry, SkillInstaller};
 pub async fn handle_skill(action: crate::cli::SkillCommands) -> Result<()> {
     let config_dir = dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("auxloclaw");
+        .join("ahnara");
 
     let skills_dir = config_dir.join("skills");
     fs::create_dir_all(&skills_dir)?;
@@ -66,7 +66,7 @@ pub async fn handle_skill(action: crate::cli::SkillCommands) -> Result<()> {
 
             if results.is_empty() {
                 println!("No skills found matching '{}'\n", query);
-                println!("💡 Try different keywords or browse all: auxloclaw skill browse");
+                println!("💡 Try different keywords or browse all: ahnara skill browse");
             } else {
                 for skill in &results {
                     let installed = if installer.is_installed(&skill.name) {
@@ -77,7 +77,7 @@ pub async fn handle_skill(action: crate::cli::SkillCommands) -> Result<()> {
                     println!("  [{}] {} - {}", installed, skill.name, skill.description);
                 }
                 println!(
-                    "\n{} results. Install with: auxloclaw skill install <name>\n",
+                    "\n{} results. Install with: ahnara skill install <name>\n",
                     results.len()
                 );
             }
@@ -189,7 +189,7 @@ pub async fn handle_skill(action: crate::cli::SkillCommands) -> Result<()> {
                 }
             }
 
-            println!("\n💡 Install with: auxloclaw skill install <name>\n");
+            println!("\n💡 Install with: ahnara skill install <name>\n");
         }
 
         crate::cli::SkillCommands::Info { name } => {

@@ -94,7 +94,7 @@ impl EventHandler for DiscordHandler {
                     let workspace = crate::commands::code::ensure_workspace(&session_id)
                         .unwrap_or_else(|e| {
                             tracing::warn!("Failed to create workspace: {}", e);
-                            std::path::PathBuf::from("/tmp/auxloclaw-code")
+                            std::path::PathBuf::from("/tmp/ahnara-code")
                         });
                     let _ = crate::commands::code::init_workspace(&workspace);
                     let code_prompt = crate::commands::code::build_code_system_prompt(&workspace);

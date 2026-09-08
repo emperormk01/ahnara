@@ -47,7 +47,7 @@ const ALLOWED_ENV_VARS: &[&str] = &[
     "DEBIAN_FRONTEND",
     "CI",
     "GITHUB_ACTIONS",
-    "AUXLOCLAW_DOCKER_BINARY",
+    "AHNARA_DOCKER_BINARY",
 ];
 
 /// Local host execution environment.

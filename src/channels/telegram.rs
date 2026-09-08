@@ -43,7 +43,7 @@ pub enum Command {
     Voice,
     #[command(description = "Manage agent persona")]
     Persona,
-    #[command(description = "Update auxloclaw to the latest version")]
+    #[command(description = "Update ahnara to the latest version")]
     Update,
     #[command(description = "Start a coding session in isolated workspace")]
     Code,
@@ -264,7 +264,7 @@ pub async fn start(
         teloxide::types::BotCommand { command: "voice".into(), description: "Toggle voice mode or set voice".into() },
         teloxide::types::BotCommand { command: "persona".into(), description: "Show or edit persona".into() },
         teloxide::types::BotCommand { command: "new".into(), description: "Start new session".into() },
-        teloxide::types::BotCommand { command: "update".into(), description: "Update auxloclaw to the latest version".into() },
+        teloxide::types::BotCommand { command: "update".into(), description: "Update ahnara to the latest version".into() },
         teloxide::types::BotCommand { command: "code".into(), description: "Start a coding session in isolated workspace".into() },
         teloxide::types::BotCommand { command: "normal".into(), description: "Exit coding mode and return to normal persona".into() },
         teloxide::types::BotCommand { command: "model".into(), description: "Override model/provider settings".into() },
@@ -433,7 +433,7 @@ async fn handle_command(
             let workspace = crate::commands::code::ensure_workspace(&session_id)
                 .unwrap_or_else(|e| {
                     tracing::warn!("Failed to create workspace: {}", e);
-                    std::path::PathBuf::from("/tmp/auxloclaw-code")
+                    std::path::PathBuf::from("/tmp/ahnara-code")
                 });
             let _ = crate::commands::code::init_workspace(&workspace);
             let code_prompt = crate::commands::code::build_code_system_prompt(&workspace);
@@ -512,8 +512,8 @@ async fn handle_command(
         }
         Command::Schedule(args) => {
             let config_path = dirs::home_dir()
-                .map(|h| h.join(".auxloclaw/config.toml"))
-                .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw/config.toml"));
+                .map(|h| h.join(".ahnara/config.toml"))
+                .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara/config.toml"));
             let scheduler_manager = crate::tools::scheduler_tools::SchedulerManager::new(
                 state.schedule_log.clone(),
                 config_path.to_string_lossy().to_string(),
@@ -749,7 +749,7 @@ async fn handle_message(bot: Bot, msg: Message, state: Arc<TelegramState>) -> Re
     if text.trim() == "/start" {
         let first = msg.from().as_ref().map(|u| u.first_name.as_str()).unwrap_or("there");
         let welcome = format!(
-            "Welcome, {first}! I am *AUXLOCLAW*, your AI agent.\n\n\
+            "Welcome, {first}! I am *AHNARA*, your AI agent.\n\n\
              \u{1f9e0} Chat naturally \u{2014} I remember our conversations.\n\
              \u{1f50d} Ask me to search the web, run code, or analyze files.\n\
              \u{1f4f1} Just message me here or on Discord.\n\n\
@@ -1015,7 +1015,7 @@ async fn handle_message(bot: Bot, msg: Message, state: Arc<TelegramState>) -> Re
     Ok(())
 }
 
-/// Download a file from Telegram and save it to the auxloclaw media directory.
+/// Download a file from Telegram and save it to the ahnara media directory.
 /// Returns the absolute path to the saved file.
 async fn download_telegram_file(
     bot: &Bot,
@@ -1024,7 +1024,7 @@ async fn download_telegram_file(
     filename: &str,
 ) -> anyhow::Result<String> {
     let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/root"));
-    let media_dir = home.join(".auxloclaw/media").join(subdir);
+    let media_dir = home.join(".ahnara/media").join(subdir);
     tokio::fs::create_dir_all(&media_dir).await?;
 
     let safe_name = filename

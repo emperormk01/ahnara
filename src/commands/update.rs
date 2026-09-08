@@ -2,8 +2,8 @@
 
 use std::process::Command;
 
-const REPO: &str = "Auxlo-xyz/auxloclaw";
-const INSTALL_PATH: &str = "/usr/local/bin/auxloclaw";
+const REPO: &str = "Auxlo-xyz/ahnara";
+const INSTALL_PATH: &str = "/usr/local/bin/ahnara";
 
 /// Run the update cycle and return a human-readable result string.
 pub async fn handle_update() -> String {
@@ -30,7 +30,7 @@ async fn run_update() -> Result<String, anyhow::Error> {
     // Step 2: fetch latest release tag from GitHub API
     report.push_str("Checking for updates...\n");
     let client = reqwest::Client::builder()
-        .user_agent("auxloclaw-updater")
+        .user_agent("ahnara-updater")
         .timeout(std::time::Duration::from_secs(15))
         .build()?;
 
@@ -67,7 +67,7 @@ async fn run_update() -> Result<String, anyhow::Error> {
 
     // Step 4: detect platform and find the right asset
     let target = detect_target()?;
-    let asset_name = format!("auxloclaw-{target}");
+    let asset_name = format!("ahnara-{target}");
 
     let assets = release["assets"]
         .as_array()
@@ -128,32 +128,32 @@ chmod +x "{INSTALL_PATH}"
 # Step B: verify the new binary works
 NEW_VER=$("{INSTALL_PATH}" --version 2>/dev/null || echo "unknown")
 if [ "$NEW_VER" = "unknown" ]; then
-    echo "auxloclaw-updater: new binary failed verification, rolling back..." >&2
+    echo "ahnara-updater: new binary failed verification, rolling back..." >&2
     if [ -f "{INSTALL_PATH}.bak" ]; then
         mv "{INSTALL_PATH}.bak" "{INSTALL_PATH}"
         chmod +x "{INSTALL_PATH}"
     fi
     exit 1
 fi
-echo "auxloclaw-updater: installed $NEW_VER, starting gateway..." >&2
+echo "ahnara-updater: installed $NEW_VER, starting gateway..." >&2
 rm -f "{INSTALL_PATH}.bak"
 
 # Step C: stop the old gateway, then exec the new one
-pkill -f 'auxloclaw gateway' 2>/dev/null
+pkill -f 'ahnara gateway' 2>/dev/null
 sleep 2
 
 # Step D: restart the gateway with logging
-LOG_DIR="$HOME/.auxloclaw/logs"
+LOG_DIR="$HOME/.ahnara/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/gateway.log"
-echo "auxloclaw-updater: logs -> $LOG_FILE" >&2
+echo "ahnara-updater: logs -> $LOG_FILE" >&2
 exec "{INSTALL_PATH}" gateway >> "$LOG_FILE" 2>&1
 "#,
         tmp_path = tmp_path,
         INSTALL_PATH = INSTALL_PATH,
     );
 
-    let restart_path = "/tmp/auxloclaw-restart.sh";
+    let restart_path = "/tmp/ahnara-restart.sh";
     std::fs::write(restart_path, restart_script)?;
     let _ = Command::new("chmod").args(["+x", restart_path]).output()?;
 

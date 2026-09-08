@@ -1,4 +1,4 @@
-//! AUXLOCLAW CLI - User-friendly command interface
+//! AHNARA CLI - User-friendly command interface
 
 pub mod memory;
 
@@ -6,12 +6,12 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "auxloclaw")]
+#[command(name = "ahnara")]
 #[command(author, version, about, long_about = None)]
 #[command(next_line_help = true)]
 pub struct Cli {
     /// Path to config file
-    #[arg(short, long, global = true, default_value = "~/.auxloclaw/config.toml")]
+    #[arg(short, long, global = true, default_value = "~/.ahnara/config.toml")]
     pub config: PathBuf,
 
     /// Enable debug logging
@@ -107,7 +107,7 @@ pub enum Commands {
         session: Option<String>,
     },
     /// Override model/provider settings for your session
-    /// Usage: auxloclaw model [model_id] [--base URL] [--key API_KEY]
+    /// Usage: ahnara model [model_id] [--base URL] [--key API_KEY]
     Model {
         /// Model ID (e.g. gpt-4o, claude-3, gemma-7b)
         model_id: Option<String>,
@@ -135,7 +135,7 @@ pub enum Commands {
         /// Goal to turn into a plan skeleton
         goal: String,
         /// Output plan JSON path
-        #[arg(short, long, default_value = "auxloclaw-plan.json")]
+        #[arg(short, long, default_value = "ahnara-plan.json")]
         output: PathBuf,
     },
     /// Execute a structured task plan DAG
@@ -172,7 +172,7 @@ pub enum Commands {
         #[arg(trailing_var_arg = true)]
         args: Vec<String>,
     },
-    /// Update auxloclaw to the latest version
+    /// Update ahnara to the latest version
     Update,
     /// Stop the gateway server
     Stop,

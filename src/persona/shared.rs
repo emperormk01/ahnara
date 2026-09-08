@@ -8,7 +8,7 @@ use crate::persona::{PersonaConfig, ResponseLength, Tone};
 
 fn config_path() -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow!("Could not find home directory"))?;
-    Ok(home.join(".auxloclaw/config.toml"))
+    Ok(home.join(".ahnara/config.toml"))
 }
 
 fn ensure_parent(path: &Path) -> Result<()> {
@@ -123,7 +123,7 @@ pub fn save_persona_to_file(output: Option<&str>) -> Result<PathBuf> {
         Some(path) => PathBuf::from(path),
         None => {
             let home = dirs::home_dir().ok_or_else(|| anyhow!("Could not find home directory"))?;
-            home.join(".auxloclaw/PERSONA.md")
+            home.join(".ahnara/PERSONA.md")
         }
     };
     ensure_parent(&path)?;

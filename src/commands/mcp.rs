@@ -20,8 +20,8 @@ use crate::config::{AppConfig, McpServerConfig};
 
 /// Path to the config file
 fn config_path() -> PathBuf {
-    let base = std::env::var("AUXLOCLAW_CONFIG")
-        .unwrap_or_else(|_| "~/.auxloclaw/config.toml".into());
+    let base = std::env::var("AHNARA_CONFIG")
+        .unwrap_or_else(|_| "~/.ahnara/config.toml".into());
     if base.starts_with('~') {
         dirs::home_dir()
             .unwrap_or_else(|| "/root".into())

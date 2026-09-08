@@ -8,7 +8,7 @@ const wa = new WhatsAppIntegration({
   authDir: process.env.WHATSAPP_AUTH_DIR ?? "./auth_whatsapp",
 });
 
-const GATEWAY_URL = process.env.AUXLOCLAW_GATEWAY_URL ?? "http://localhost:18789";
+const GATEWAY_URL = process.env.AHNARA_GATEWAY_URL ?? "http://localhost:18789";
 
 // Initialize WhatsApp
 await wa.connect();

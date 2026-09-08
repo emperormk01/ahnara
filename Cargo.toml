@@ -1,11 +1,11 @@
 [package]
-name = "auxloclaw"
+name = "ahnara"
 version = "1.2.4"
 edition = "2021"
 authors = ["Auxlo.xyz <hello@auxlo.xyz>"]
 description = "Ultra-high-performance AI agent framework - beats Hermes and Nanobot"
 license = "MIT"
-repository = "https://github.com/Auxlo-xyz/auxloclaw"
+repository = "https://github.com/Auxlo-xyz/ahnara"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.tar.gz"
@@ -90,7 +90,7 @@ tokio-test = "0.4"
 criterion = "0.5"
 
 [[bin]]
-name = "auxloclaw"
+name = "ahnara"
 path = "src/main.rs"
 
 [profile.release]

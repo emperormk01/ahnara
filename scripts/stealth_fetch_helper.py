@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stealth fetch helper - called by auxloclaw StealthFetchTool."""
+"""Stealth fetch helper - called by ahnara StealthFetchTool."""
 
 import argparse
 import json

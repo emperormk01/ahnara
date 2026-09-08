@@ -7,7 +7,7 @@
 //!   /token get <name>         - Retrieve token value (internal/agent use only)
 //!   /token help               - Show usage
 //!
-//! Tokens are stored encrypted with AES-256-GCM in ~/.auxloclaw/tokens.enc.
+//! Tokens are stored encrypted with AES-256-GCM in ~/.ahnara/tokens.enc.
 //! The LLM never sees token values -- only names are injected into the system prompt.
 
 use aes_gcm::{
@@ -26,24 +26,24 @@ struct TokenStore {
     tokens: HashMap<String, String>,
 }
 
-fn auxloclaw_dir() -> PathBuf {
+fn ahnara_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| "/root".into())
-        .join(".auxloclaw")
+        .join(".ahnara")
 }
 
 fn store_path() -> PathBuf {
-    auxloclaw_dir().join("tokens.enc")
+    ahnara_dir().join("tokens.enc")
 }
 
 fn salt_path() -> PathBuf {
-    auxloclaw_dir().join(".token_key_salt")
+    ahnara_dir().join(".token_key_salt")
 }
 
 fn derive_cipher() -> Result<Aes256Gcm> {
-    let dir = auxloclaw_dir();
+    let dir = ahnara_dir();
     fs::create_dir_all(&dir)
-        .with_context(|| format!("Failed to create auxloclaw dir: {:?}", &dir))?;
+        .with_context(|| format!("Failed to create ahnara dir: {:?}", &dir))?;
 
     let sp = salt_path();
     if !sp.exists() {
@@ -66,7 +66,7 @@ fn derive_cipher() -> Result<Aes256Gcm> {
 
     let hostname = hostname::get()
         .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "auxloclaw".into());
+        .unwrap_or_else(|_| "ahnara".into());
 
     let mut hasher = Sha256::new();
     hasher.update(hostname.as_bytes());

@@ -7,7 +7,7 @@ use crate::orchestrator::{Tool, ToolResult};
 
 pub struct StealthFetchTool;
 
-const HELPER_SCRIPT: &str = "/usr/local/share/auxloclaw/stealth_fetch_helper.py";
+const HELPER_SCRIPT: &str = "/usr/local/share/ahnara/stealth_fetch_helper.py";
 
 #[async_trait]
 impl Tool for StealthFetchTool {
@@ -162,7 +162,7 @@ fn check_scrapling() -> Result<()> {
     // Check helper script
     if !std::path::Path::new(HELPER_SCRIPT).exists() {
         return Err(anyhow!(
-            "stealth_fetch helper script not found at {}. Reinstall auxloclaw to deploy it:\n  curl -fsSL https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/get.sh | bash",
+            "stealth_fetch helper script not found at {}. Reinstall ahnara to deploy it:\n  curl -fsSL https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/get.sh | bash",
             HELPER_SCRIPT
         ));
     }

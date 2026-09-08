@@ -1,4 +1,4 @@
-//! Provider adapters -- translate AUXLOCLAW's internal CompletionRequest/Response
+//! Provider adapters -- translate AHNARA's internal CompletionRequest/Response
 //! into provider-native formats and back.
 //!
 //! Each adapter implements `ProviderAdapter` and handles:

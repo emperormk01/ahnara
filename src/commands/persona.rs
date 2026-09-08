@@ -22,7 +22,7 @@ pub fn handle_persona(action: PersonaCommands) -> Result<()> {
             println!("  No emojis: {}", persona.style.formatting.no_emojis);
         }
         PersonaCommands::Edit => {
-            println!("Use subcommands like `auxloclaw persona name ...`, `behavior ...`, `style ...`, `load ...`, or `reset`.");
+            println!("Use subcommands like `ahnara persona name ...`, `behavior ...`, `style ...`, `load ...`, or `reset`.");
         }
         PersonaCommands::Name { name } => {
             set_name(&name)?;

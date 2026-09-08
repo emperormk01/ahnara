@@ -6,15 +6,15 @@ use std::path::PathBuf;
 
 fn load_config() -> Result<crate::config::AppConfig> {
     let config_path = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/config.toml"))
+        .map(|h| h.join(".ahnara/config.toml"))
         .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
     crate::config::AppConfig::load(&config_path.to_string_lossy())
 }
 
 fn config_path() -> PathBuf {
     dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/config.toml"))
-        .unwrap_or_else(|| PathBuf::from("~/.auxloclaw/config.toml"))
+        .map(|h| h.join(".ahnara/config.toml"))
+        .unwrap_or_else(|| PathBuf::from("~/.ahnara/config.toml"))
 }
 
 pub async fn handle_provider(action: crate::cli::ProviderCommands) -> Result<()> {
@@ -24,7 +24,7 @@ pub async fn handle_provider(action: crate::cli::ProviderCommands) -> Result<()>
                 Ok(config) => {
                     if config.providers.providers.is_empty() {
                         println!("No providers configured.");
-                        println!("Run `auxloclaw setup` to add one.");
+                        println!("Run `ahnara setup` to add one.");
                     } else {
                         println!("\nConfigured Providers\n");
                         for p in &config.providers.providers {
@@ -36,7 +36,7 @@ pub async fn handle_provider(action: crate::cli::ProviderCommands) -> Result<()>
                 }
                 Err(e) => {
                     println!("Could not load config: {}", e);
-                    println!("Run `auxloclaw setup` to create one.");
+                    println!("Run `ahnara setup` to create one.");
                 }
             }
             println!();
@@ -47,7 +47,7 @@ pub async fn handle_provider(action: crate::cli::ProviderCommands) -> Result<()>
                 Ok(config) => {
                     if config.providers.active.is_empty() || config.providers.providers.is_empty() {
                         println!("No active provider configured.");
-                        println!("Run `auxloclaw setup` to set one up.");
+                        println!("Run `ahnara setup` to set one up.");
                     } else {
                         println!("Active provider: {}", config.providers.active);
                         if let Some(p) = config.providers.providers.iter().find(|p| p.name == config.providers.active) {
@@ -63,7 +63,7 @@ pub async fn handle_provider(action: crate::cli::ProviderCommands) -> Result<()>
         crate::cli::ProviderCommands::Use { name } => {
             let path = config_path();
             if !path.exists() {
-                println!("No config found. Run `auxloclaw setup` first.");
+                println!("No config found. Run `ahnara setup` first.");
                 return Ok(());
             }
             let raw = fs::read_to_string(&path)?;
@@ -107,7 +107,7 @@ pub async fn handle_provider(action: crate::cli::ProviderCommands) -> Result<()>
             };
 
             if providers_to_test.is_empty() {
-                println!("No providers to test. Run `auxloclaw setup` first.");
+                println!("No providers to test. Run `ahnara setup` first.");
                 return Ok(());
             }
 
@@ -141,7 +141,7 @@ pub async fn handle_provider(action: crate::cli::ProviderCommands) -> Result<()>
         crate::cli::ProviderCommands::Add { name, base, key } => {
             let path = config_path();
             if !path.exists() {
-                println!("No config found. Run `auxloclaw setup` first.");
+                println!("No config found. Run `ahnara setup` first.");
                 return Ok(());
             }
             let raw = fs::read_to_string(&path)?;

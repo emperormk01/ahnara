@@ -126,14 +126,14 @@ mod tests {
     #[test]
     fn test_context_with_facts() {
         let store = Arc::new(MemoryStore::new_in_memory().unwrap());
-        store.set_fact("project", "auxloclaw", Some("manual")).unwrap();
+        store.set_fact("project", "ahnara", Some("manual")).unwrap();
         store.set_fact("language", "rust", Some("manual")).unwrap();
 
         let ctx = ContextIndex::new(store);
         let result = ctx.generate(None).unwrap();
         assert!(result.contains("[CROSS-SESSION MEMORY]"));
         assert!(result.contains("Known Facts"));
-        assert!(result.contains("auxloclaw"));
+        assert!(result.contains("ahnara"));
         assert!(result.contains("[END MEMORY]"));
     }
 

@@ -585,7 +585,7 @@ mod tests {
         delegator.set_max_budget(75000);
         let original = delegator.stats();
 
-        let path = std::env::temp_dir().join("auxloclaw_test_delegation.json");
+        let path = std::env::temp_dir().join("ahnara_test_delegation.json");
         delegator.save(&path).expect("save should succeed");
 
         let loaded = CostAwareDelegator::load_or_default(&path);

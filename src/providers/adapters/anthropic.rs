@@ -1,4 +1,4 @@
-//! Anthropic Claude adapter -- transforms AUXLOCLAW messages into Anthropic's
+//! Anthropic Claude adapter -- transforms AHNARA messages into Anthropic's
 //! Messages API format (/v1/messages). Anthropic has a fundamentally different
 //! structure: system prompt is a top-level field, not a message, tool results use
 //! content blocks with tool_use_id, tools go in a top-level tools array, and the

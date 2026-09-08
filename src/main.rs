@@ -1,4 +1,4 @@
-//! AUXLOCLAW - Ultra-High-Performance AI Agent Framework
+//! AHNARA - Ultra-High-Performance AI Agent Framework
 
 mod agent;
 mod auth;
@@ -61,19 +61,19 @@ macro_rules! bann {
 async fn main() -> anyhow::Result<()> {
     let args = Cli::parse_args();
 
-    // Initialize logging with file appender (writes to both stderr and ~/.auxloclaw/logs/)
+    // Initialize logging with file appender (writes to both stderr and ~/.ahnara/logs/)
     // Default: only warnings+ reach stderr. info+ still goes to the rotating log file
-    // under ~/.auxloclaw/logs/. The `--debug` flag raises the global level for both
+    // under ~/.ahnara/logs/. The `--debug` flag raises the global level for both
     // destinations. `RUST_LOG` always wins if set, which is the standard escape hatch
-    // for operators and for `auxloclaw logs` follow mode.
+    // for operators and for `ahnara logs` follow mode.
     let level = if args.debug {
         "debug".to_string()
     } else {
         std::env::var("RUST_LOG").unwrap_or_else(|_| "warn".to_string())
     };
     let log_dir = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/logs"))
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp/auxloclaw/logs"));
+        .map(|h| h.join(".ahnara/logs"))
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp/ahnara/logs"));
     let _ = std::fs::create_dir_all(&log_dir);
     let file_appender = tracing_appender::rolling::daily(&log_dir, "gateway.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
@@ -201,11 +201,11 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Model { model_id, base, key, reset, show } => {
             let session_db = dirs::home_dir()
-                .map(|h| h.join(".auxloclaw/sessions"))
+                .map(|h| h.join(".ahnara/sessions"))
                 .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
             let session_db_parent = session_db.parent()
                 .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw"));
+                .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara"));
             let model_store = memory::model_store::ModelStore::new(&session_db_parent)?;
             let user_id = "cli";
             let channel = "cli";
@@ -258,8 +258,8 @@ async fn main() -> anyhow::Result<()> {
         Commands::Schedule { args } => {
             if args.is_empty() || args[0] == "list" {
                 let config_path = dirs::home_dir()
-                    .map(|h| h.join(".auxloclaw/config.toml"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw/config.toml"));
+                    .map(|h| h.join(".ahnara/config.toml"))
+                    .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara/config.toml"));
                 let config = config::AppConfig::load(&config_path.to_string_lossy())?;
                 if config.scheduler.jobs.is_empty() {
                     println!("No scheduled jobs configured.");
@@ -277,8 +277,8 @@ async fn main() -> anyhow::Result<()> {
                 }
             } else {
                 let config_path = dirs::home_dir()
-                    .map(|h| h.join(".auxloclaw/config.toml"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw/config.toml"));
+                    .map(|h| h.join(".ahnara/config.toml"))
+                    .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara/config.toml"));
                 let run_log = scheduler::create_run_log(&[]);
                 let manager = tools::SchedulerManager::new(
                     run_log,
@@ -300,29 +300,29 @@ struct AppState {
 
 async fn run_gateway(host: &str, port: u16) -> anyhow::Result<()> {
     let auth_config = AuthConfig {
-        api_key: std::env::var("AUXLOCLAW_API_KEY").ok(),
-        require_auth: std::env::var("AUXLOCLAW_REQUIRE_AUTH")
+        api_key: std::env::var("AHNARA_API_KEY").ok(),
+        require_auth: std::env::var("AHNARA_REQUIRE_AUTH")
             .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
             .unwrap_or(false),
     };
     let auth_state = Arc::new(AuthState::new(auth_config));
 
-    bann!("\x1b[36m🦞 AUXLOCLAW v{}\x1b[0m initializing...", env!("CARGO_PKG_VERSION"));
+    bann!("\x1b[36m🦞 AHNARA v{}\x1b[0m initializing...", env!("CARGO_PKG_VERSION"));
 
     let start = Instant::now();
 
     // Load config
     let config_path = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/config.toml"))
+        .map(|h| h.join(".ahnara/config.toml"))
         .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
     let config =
-        config::AppConfig::load(config_path.to_str().unwrap_or("~/.auxloclaw/config.toml"))?;
+        config::AppConfig::load(config_path.to_str().unwrap_or("~/.ahnara/config.toml"))?;
 
     // Expand tilde in database path
     let session_db = shellexpand::tilde(&config.memory.database_path).into_owned();
     let session_db_parent = std::path::Path::new(&session_db).parent()
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw"));
+        .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara"));
 
     // Initialize core components
     let memory = Arc::new(memory::MemoryEngine::new(&config.memory)?);
@@ -330,7 +330,7 @@ async fn run_gateway(host: &str, port: u16) -> anyhow::Result<()> {
 
     if config.providers.providers.is_empty() {
         bann!("\x1b[33m⚠  No AI provider configured.\x1b[0m");
-        bann!("   Run `auxloclaw setup` or add a provider to ~/.auxloclaw/config.toml");
+        bann!("   Run `ahnara setup` or add a provider to ~/.ahnara/config.toml");
         bann!("   Example:");
         bann!("     [providers]");
         bann!("     active = \"openai\"");
@@ -435,7 +435,7 @@ async fn run_gateway(host: &str, port: u16) -> anyhow::Result<()> {
     if let Some(ref ms) = memory_store {
         let sessions_dir = std::path::Path::new(&session_db).parent()
             .map(|p| p.join("sessions"))
-            .unwrap_or_else(|| std::path::PathBuf::from("~/.auxloclaw/sessions"));
+            .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara/sessions"));
         if sessions_dir.exists() {
             match agent.migrate_json_sessions_to_sqlite(ms, &sessions_dir) {
                 Ok(count) => {
@@ -736,7 +736,7 @@ async fn dashboard_handler() -> impl axum::response::IntoResponse {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AUXLOCLAW Gateway</title>
+<title>AHNARA Gateway</title>
 <style>
 :root { color-scheme: dark; }
 body { font-family: system-ui, sans-serif; background: #0f1117; color: #e1e4e8; margin: 0; padding: 2rem; }
@@ -764,7 +764,7 @@ pre code { background: none; padding: 0; }
 </head>
 <body>
 <div class="container">
-<h1>🦞 AUXLOCLAW Gateway</h1>
+<h1>🦞 AHNARA Gateway</h1>
 <p class="tagline">AI Agent Framework — now running and ready for requests.</p>
 
 <div class="card">
@@ -781,7 +781,7 @@ pre code { background: none; padding: 0; }
 
 <div class="card">
 <h2>📱 Channels</h2>
-<p>Connect via <strong>Telegram</strong> or <strong>Discord</strong> to interact with the agent. Configured in <code>~/.auxloclaw/config.toml</code></p>
+<p>Connect via <strong>Telegram</strong> or <strong>Discord</strong> to interact with the agent. Configured in <code>~/.ahnara/config.toml</code></p>
 </div>
 
 <div class="card">
@@ -792,7 +792,7 @@ pre code { background: none; padding: 0; }
 </div>
 
 <div class="footer">
-<p>AUXLOCLAW &copy; 2025–2026 &middot; AI Agent Framework</p>
+<p>AHNARA &copy; 2025–2026 &middot; AI Agent Framework</p>
 </div>
 </div>
 <script>

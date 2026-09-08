@@ -4,12 +4,12 @@ use anyhow::Result;
 use std::process::Command;
 
 pub fn handle_stop() -> Result<()> {
-    println!("\n🛑 Stopping AUXLOCLAW gateway...\n");
+    println!("\n🛑 Stopping AHNARA gateway...\n");
     
     // Check if gateway is running
     let check = Command::new("pgrep")
         .arg("-f")
-        .arg("auxloclaw gateway")
+        .arg("ahnara gateway")
         .output();
     
     let was_running = check
@@ -25,7 +25,7 @@ pub fn handle_stop() -> Result<()> {
     // Kill gateway process
     let output = Command::new("pkill")
         .arg("-f")
-        .arg("auxloclaw gateway")
+        .arg("ahnara gateway")
         .output();
     
     match output {

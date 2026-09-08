@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Watchdog for auxloclaw gateway.
+# Watchdog for ahnara gateway.
 # Runs on a cron (every minute).  Restarts the gateway if it's down.
 # Also handles post-reset recovery: binary reinstall + data dir symlink.
 
-LOCKFILE="/tmp/auxloclaw_watchdog.lock"
-LOGFILE="/tmp/auxloclaw_watchdog.log"
-REPO="Auxlo-xyz/auxloclaw"
-BINARY="auxloclaw"
+LOCKFILE="/tmp/ahnara_watchdog.lock"
+LOGFILE="/tmp/ahnara_watchdog.log"
+REPO="Auxlo-xyz/ahnara"
+BINARY="ahnara"
 INSTALL_DIR="/usr/local/bin"
 INSTALL_PATH="${INSTALL_DIR}/${BINARY}"
 
@@ -74,13 +74,13 @@ ensure_binary() {
 # ── Data dir recovery (same logic as entrypoint) ─────────────────────────────
 
 find_persistent_root() {
-    if [ -n "${AUXLOCLAW_HOME:-}" ]; then
+    if [ -n "${ahnara_HOME:-}" ]; then
         echo ""
         return
     fi
     local root_dev
     root_dev="$(stat -c %d / 2>/dev/null || echo 0)"
-    local candidates="/home/workspace /data /mnt/data /srv/auxloclaw /persistent"
+    local candidates="/home/workspace /data /mnt/data /srv/ahnara /persistent"
     for mount in $candidates; do
         [ -d "$mount" ] || continue
         [ -w "$mount" ] || continue
@@ -101,12 +101,12 @@ find_persistent_root() {
 }
 
 ensure_data_dir() {
-    local home_auxlo="${HOME}/.auxloclaw"
+    local home_auxlo="${HOME}/.ahnara"
 
-    if [ -n "${AUXLOCLAW_HOME:-}" ]; then
-        mkdir -p "$AUXLOCLAW_HOME"
+    if [ -n "${ahnara_HOME:-}" ]; then
+        mkdir -p "$ahnara_HOME"
         if [ ! -e "$home_auxlo" ]; then
-            ln -sf "$AUXLOCLAW_HOME" "$home_auxlo"
+            ln -sf "$ahnara_HOME" "$home_auxlo"
         fi
         return
     fi
@@ -117,7 +117,7 @@ ensure_data_dir() {
     persistent_root="$(find_persistent_root)"
     [ -z "$persistent_root" ] && { mkdir -p "$home_auxlo"; return; }
 
-    local data_target="${persistent_root}/.auxloclaw-data"
+    local data_target="${persistent_root}/.ahnara-data"
     mkdir -p "$data_target"
     if [ -d "$home_auxlo" ] && [ ! -L "$home_auxlo" ]; then
         cp -an "$home_auxlo"/. "$data_target"/ 2>/dev/null || true
@@ -133,7 +133,7 @@ ensure_binary
 ensure_data_dir
 
 gateway_up() {
-    timeout 12s auxloclaw status 2>/dev/null | grep -q "Gateway:"
+    timeout 12s ahnara status 2>/dev/null | grep -q "Gateway:"
 }
 
 if gateway_up; then
@@ -142,8 +142,8 @@ if gateway_up; then
 fi
 
 log "WARN: gateway down, restarting"
-auxloclaw stop >/dev/null 2>&1 || true
-auxloclaw gateway >/tmp/auxloclaw_gateway.out 2>&1 &
+ahnara stop >/dev/null 2>&1 || true
+ahnara gateway >/tmp/ahnara_gateway.out 2>&1 &
 
 for _ in {1..12}; do
   sleep 1

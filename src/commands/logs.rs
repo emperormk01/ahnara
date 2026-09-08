@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-const DEFAULT_LOG_DIR: &str = "~/.auxloclaw/logs";
+const DEFAULT_LOG_DIR: &str = "~/.ahnara/logs";
 const DEFAULT_LINES: usize = 50;
 
 /// Handle the /logs command.
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn read_logs_returns_message_when_missing() {
-        let path = PathBuf::from("/tmp/nonexistent-auxloclaw-test.log");
+        let path = PathBuf::from("/tmp/nonexistent-ahnara-test.log");
         let result = read_logs(&path, 50, None, false);
         assert!(result.contains("No log file found"));
     }

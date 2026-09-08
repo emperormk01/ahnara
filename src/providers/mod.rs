@@ -1,7 +1,7 @@
 //! Provider pool with multi-provider support
 //! Users can choose which provider/model to use at any time
 //!
-//! Provider adapters (in `adapters/`) translate AUXLOCLAW's internal
+//! Provider adapters (in `adapters/`) translate AHNARA's internal
 //! request/response format to provider-native formats. Currently supports:
 //!   - OpenAI-compatible (NVIDIA, OpenRouter, Groq, DeepSeek, custom endpoints)
 //!   - Google Gemini (AI Studio OpenAI-compatible endpoint)
@@ -438,7 +438,7 @@ impl LLMProvider for OpenAICompatibleProvider {
 
 fn capture_provider_rejections_enabled() -> bool {
     matches!(
-        std::env::var("AUXLOCLAW_CAPTURE_REJECTED_REQUESTS")
+        std::env::var("AHNARA_CAPTURE_REJECTED_REQUESTS")
             .unwrap_or_default()
             .to_ascii_lowercase()
             .as_str(),
@@ -447,12 +447,12 @@ fn capture_provider_rejections_enabled() -> bool {
 }
 
 fn rejected_request_dir() -> PathBuf {
-    std::env::var("AUXLOCLAW_REJECTED_REQUEST_DIR")
+    std::env::var("AHNARA_REJECTED_REQUEST_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
             dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
-                .join(".auxloclaw/debug/rejected-requests")
+                .join(".ahnara/debug/rejected-requests")
         })
 }
 

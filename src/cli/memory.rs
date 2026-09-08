@@ -54,11 +54,11 @@ pub enum MemorySubcommand {
 fn open_store() -> Result<MemoryStore> {
     let config_path = dirs::home_dir()
         .ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?
-        .join(".auxloclaw")
+        .join(".ahnara")
         .join("config.toml");
 
     let config = crate::config::AppConfig::load(
-        config_path.to_str().unwrap_or("~/.auxloclaw/config.toml"),
+        config_path.to_str().unwrap_or("~/.ahnara/config.toml"),
     )?;
 
     let db_path = shellexpand::tilde(&config.memory.database_path).into_owned();

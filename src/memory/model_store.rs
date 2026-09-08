@@ -2,7 +2,7 @@
 //!
 //! Each user can override the active LLM provider for their sessions.
 //! API keys are encrypted at rest using AES-256-GCM with a machine-derived key.
-//! Stored in `~/.auxloclaw/model_overrides/<channel>_<user_id>.json`.
+//! Stored in `~/.ahnara/model_overrides/<channel>_<user_id>.json`.
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
@@ -80,7 +80,7 @@ impl ModelStore {
         // Derive key: SHA-256(hostname + salt)
         let hostname = hostname::get()
             .map(|h| h.to_string_lossy().to_string())
-            .unwrap_or_else(|_| "auxloclaw".into());
+            .unwrap_or_else(|_| "ahnara".into());
 
         let mut hasher = Sha256::new();
         hasher.update(hostname.as_bytes());
@@ -191,7 +191,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("auxloclaw_model_test_{}", ts));
+        let dir = std::env::temp_dir().join(format!("ahnara_model_test_{}", ts));
         fs::create_dir_all(&dir).unwrap();
         ModelStore::new(&dir).unwrap()
     }

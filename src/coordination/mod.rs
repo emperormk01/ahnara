@@ -70,13 +70,13 @@ impl AgentCoordinator {
     }
 
     /// Snapshot of the current delegation stats (delegated/kept counts,
-    /// budget used, etc.). Used by `auxloclaw status --delegation`.
+    /// budget used, etc.). Used by `ahnara status --delegation`.
     pub async fn cost_aware_delegator_stats(&self) -> DelegationStats {
         self.cost_aware_delegator.read().await.stats()
     }
 
     /// Clone the current cost-aware delegator for snapshotting (used by
-    /// shutdown persistence and the `auxloclaw status --delegation` command).
+    /// shutdown persistence and the `ahnara status --delegation` command).
     pub async fn cost_aware_delegator_snapshot(&self) -> CostAwareDelegator {
         self.cost_aware_delegator.read().await.clone()
     }

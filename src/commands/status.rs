@@ -8,7 +8,7 @@ use sysinfo::System;
 use crate::coordination::cost_aware_delegation::CostAwareDelegator;
 
 pub fn handle_status(delegation: bool) -> Result<()> {
-    println!("\n🦞 AUXLOCLAW Status\n");
+    println!("\n🦞 AHNARA Status\n");
     
     if delegation {
         show_delegation_status()?;
@@ -35,7 +35,7 @@ fn show_system_status() -> Result<()> {
     // Config
     println!("\n⚙️  Configuration");
     let config_dir = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw"))
+        .map(|h| h.join(".ahnara"))
         .unwrap_or_default();
     
     if config_dir.exists() {
@@ -58,7 +58,7 @@ fn show_system_status() -> Result<()> {
                 }
             }
         } else {
-            println!("  Config file: ✗ (run `auxloclaw setup`)");
+            println!("  Config file: ✗ (run `ahnara setup`)");
         }
         
         let skills_dir = config_dir.join("skills");
@@ -89,14 +89,14 @@ fn show_system_status() -> Result<()> {
             println!("  Memory: ✓");
         }
     } else {
-        println!("  Not configured (run `auxloclaw setup`)");
+        println!("  Not configured (run `ahnara setup`)");
     }
     
     // Running processes
     println!("\n🔄 Running Instances");
     let mut found = false;
     for (pid, process) in sys.processes() {
-        if process.name().contains("auxloclaw") {
+        if process.name().contains("ahnara") {
             println!("  PID: {}", pid);
             println!("  Memory: {} KB", process.memory());
             println!("  CPU: {:.1}%", process.cpu_usage());
@@ -127,8 +127,8 @@ fn show_delegation_status() -> Result<()> {
     // `set_min_complexity`, `set_max_budget`, `record_usage` to actually be reflected
     // here -- previously this function printed hardcoded zeros.
     let state_path = dirs::home_dir()
-        .map(|h| h.join(".auxloclaw/delegation_state.json"))
-        .unwrap_or_else(|| PathBuf::from("~/.auxloclaw/delegation_state.json"));
+        .map(|h| h.join(".ahnara/delegation_state.json"))
+        .unwrap_or_else(|| PathBuf::from("~/.ahnara/delegation_state.json"));
     let delegator = CostAwareDelegator::load_or_default(&state_path);
     let stats = delegator.stats();
     println!("📊 Delegation Statistics");

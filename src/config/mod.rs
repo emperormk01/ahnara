@@ -1,4 +1,4 @@
-//! Configuration management for AUXLOCLAW
+//! Configuration management for AHNARA
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ pub struct AgentConfig {
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
-            name: "AUXLOCLAW".into(),
+            name: "AHNARA".into(),
             default_model: "".into(),
             max_tokens: 8192,
             temperature: 1.0,
@@ -165,7 +165,7 @@ fn default_cache_size() -> usize {
     1000
 }
 fn default_db_path() -> String {
-    "~/.auxloclaw/memory.db".into()
+    "~/.ahnara/memory.db".into()
 }
 fn default_consolidation() -> u64 {
     300
@@ -224,7 +224,7 @@ impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
             hot_cache_size: 1000,
-            database_path: "~/.auxloclaw/memory.db".into(),
+            database_path: "~/.ahnara/memory.db".into(),
             embedding_model: None,
             consolidation_interval_secs: 300,
             compaction_enabled: true,
@@ -491,13 +491,13 @@ impl AppConfig {
 
     fn with_env_overrides(mut self) -> Self {
         // First: any provider whose key is empty OR still the setup placeholder
-        // can be filled from a single global `AUXLOCLAW_API_KEY` env var.
+        // can be filled from a single global `AHNARA_API_KEY` env var.
         // This lets users export a key once instead of repeating it in
         // config.toml for every provider.
-        let global_key = std::env::var("AUXLOCLAW_API_KEY")
+        let global_key = std::env::var("AHNARA_API_KEY")
             .ok()
             .filter(|k| !k.trim().is_empty());
-        const PLACEHOLDER: &str = "<set via auxloclaw token or AUXLOCLAW_API_KEY env>";
+        const PLACEHOLDER: &str = "<set via ahnara token or AHNARA_API_KEY env>";
         for provider in &mut self.providers.providers {
             if provider.api_key.is_empty() || provider.api_key == PLACEHOLDER {
                 if let Some(ref k) = global_key {
@@ -575,7 +575,7 @@ impl AppConfig {
         }
 
         // Memory database path
-        if let Ok(path) = std::env::var("AUXLOCLAW_DB_PATH") {
+        if let Ok(path) = std::env::var("AHNARA_DB_PATH") {
             self.memory.database_path = path;
         }
 

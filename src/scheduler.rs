@@ -29,7 +29,7 @@ pub struct ScheduleRunEntry {
 
 pub type ScheduleRunLog = Arc<RwLock<HashMap<String, ScheduleRunEntry>>>;
 
-const STATE_FILE: &str = "~/.auxloclaw/schedule_state.json";
+const STATE_FILE: &str = "~/.ahnara/schedule_state.json";
 
 fn load_state_file() -> HashMap<String, ScheduleRunEntry> {
     let path = shellexpand::tilde(STATE_FILE);

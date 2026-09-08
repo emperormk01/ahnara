@@ -9,7 +9,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
-/// Official AUXLOCLAW skill registry
+/// Official AHNARA skill registry
 pub const REGISTRY_URL: &str = "https://raw.githubusercontent.com/auxlo/skills/main/manifest.json";
 
 /// AgentSkills.io compatible registry
@@ -84,7 +84,7 @@ impl SkillRegistry {
     pub fn new() -> Self {
         let taps_path = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("auxloclaw")
+            .join("ahnara")
             .join("skill-taps.json");
 
         Self {
@@ -152,7 +152,7 @@ impl SkillRegistry {
     pub fn view_skill(&self, name: &str) -> Option<super::Skill> {
         let skills_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("auxloclaw")
+            .join("ahnara")
             .join("skills");
 
         for entry in walkdir::WalkDir::new(&skills_dir)
@@ -178,7 +178,7 @@ impl SkillRegistry {
     pub async fn update_skill(&self, name: &str, body: &str) -> Result<()> {
         let skills_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("auxloclaw")
+            .join("ahnara")
             .join("skills");
 
         for entry in walkdir::WalkDir::new(&skills_dir)
@@ -210,7 +210,7 @@ impl SkillRegistry {
     pub async fn create_skill(&self, name: &str, description: &str, body: &str) -> Result<()> {
         let skills_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("auxloclaw")
+            .join("ahnara")
             .join("skills");
 
         let skill_dir = skills_dir.join(name);
@@ -346,7 +346,7 @@ impl SkillRegistry {
         Ok(serde_json::from_slice(&bytes)?)
     }
 
-    /// Built-in skills that come with AUXLOCLAW
+    /// Built-in skills that come with AHNARA
     fn get_builtin_skills(&self) -> Vec<RegistrySkill> {
         vec![
             RegistrySkill {

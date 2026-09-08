@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# AUXLOCLAW Installer
-# Usage: curl -sSL https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/install.sh | bash
+# ahnara Installer
+# Usage: curl -sSL https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/install.sh | bash
 # Options:
-#   AUXLOCLAW_VERSION       - specific version tag (default: latest)
-#   AUXLOCLAW_DIR           - install directory (default: /usr/local/bin)
-#   AUXLOCLAW_SKIP_CONFIRM  - set to 1 to skip confirmation prompt
+#   ahnara_VERSION       - specific version tag (default: latest)
+#   ahnara_DIR           - install directory (default: /usr/local/bin)
+#   ahnara_SKIP_CONFIRM  - set to 1 to skip confirmation prompt
 
-REPO="Auxlo-xyz/auxloclaw"
-BINARY="auxloclaw"
-INSTALL_DIR="${AUXLOCLAW_DIR:-/usr/local/bin}"
+REPO="Auxlo-xyz/ahnara"
+BINARY="ahnara"
+INSTALL_DIR="${ahnara_DIR:-/usr/local/bin}"
 GITHUB_API="https://api.github.com/repos/${REPO}/releases"
 
 RED='\033[0;31m'
@@ -54,7 +54,7 @@ detect_os() {
     case "$os" in
         Linux)   echo "linux" ;;
         Darwin)  echo "macos" ;;
-        *)       die "Unsupported OS: $os. AUXLOCLAW currently supports Linux and macOS." ;;
+        *)       die "Unsupported OS: $os. ahnara currently supports Linux and macOS." ;;
     esac
 }
 
@@ -254,12 +254,12 @@ with sync_playwright() as p:
     fi
 
     # Deploy stealth_fetch helper script
-    local HELPER_DIR="/usr/local/share/auxloclaw"
+    local HELPER_DIR="/usr/local/share/ahnara"
     local HELPER_PATH="${HELPER_DIR}/stealth_fetch_helper.py"
     if [ ! -f "$HELPER_PATH" ]; then
         info "Deploying stealth_fetch helper script..."
         mkdir -p "$HELPER_DIR"
-        curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/scripts/stealth_fetch_helper.py" \
+        curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/stealth_fetch_helper.py" \
             -o "$HELPER_PATH" \
             && chmod +x "$HELPER_PATH" \
             || warn "Failed to download stealth_fetch helper script"
@@ -268,17 +268,17 @@ with sync_playwright() as p:
     fi
 
     # Deploy watchdog script (auto-restarts gateway if it crashes)
-    local WATCHDOG_BIN="/usr/local/bin/auxloclaw_watchdog.sh"
+    local WATCHDOG_BIN="/usr/local/bin/ahnara_watchdog.sh"
     info "Deploying watchdog script..."
-    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/scripts/auxloclaw_watchdog.sh" \
+    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/ahnara_watchdog.sh" \
         -o "$WATCHDOG_BIN" \
         && chmod +x "$WATCHDOG_BIN" \
         || warn "Failed to deploy watchdog script"
 
     # Deploy self-healing entrypoint (auto-reinstalls binary on container reset)
-    local ENTRYPOINT_BIN="/usr/local/bin/auxloclaw_entrypoint.sh"
+    local ENTRYPOINT_BIN="/usr/local/bin/ahnara_entrypoint.sh"
     info "Deploying self-healing entrypoint..."
-    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/scripts/auxloclaw_entrypoint.sh" \
+    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/ahnara_entrypoint.sh" \
         -o "$ENTRYPOINT_BIN" \
         && chmod +x "$ENTRYPOINT_BIN" \
         || warn "Failed to deploy entrypoint script"
@@ -287,14 +287,14 @@ with sync_playwright() as p:
     echo -e "${BOLD}Next steps:${NC}" >&2
     echo "" >&2
     echo "  1. Run the setup wizard:" >&2
-    echo -e "     ${CYAN}auxloclaw setup${NC}" >&2
+    echo -e "     ${CYAN}ahnara setup${NC}" >&2
     echo "" >&2
     echo "  2. Add MCP integrations (GitHub, etc):" >&2
-    echo -e "     ${CYAN}auxloclaw mcp add github${NC}" >&2
-    echo -e "     ${CYAN}auxloclaw token set GITHUB_TOKEN your-token-here${NC}" >&2
+    echo -e "     ${CYAN}ahnara mcp add github${NC}" >&2
+    echo -e "     ${CYAN}ahnara token set GITHUB_TOKEN your-token-here${NC}" >&2
     echo "" >&2
     echo "  3. Start the gateway:" >&2
-    echo -e "     ${CYAN}auxloclaw gateway${NC}" >&2
+    echo -e "     ${CYAN}ahnara gateway${NC}" >&2
     echo "" >&2
     echo -e "  Docs: ${CYAN}https://github.com/${REPO}${NC}" >&2
     echo "" >&2
@@ -302,7 +302,7 @@ with sync_playwright() as p:
 
 main() {
     echo "" >&2
-    echo -e "${BOLD}AUXLOCLAW Installer${NC}" >&2
+    echo -e "${BOLD}ahnara Installer${NC}" >&2
     echo "  Ultra-High-Performance AI Agent Framework" >&2
     echo "" >&2
 
@@ -321,7 +321,7 @@ main() {
         local current_version
         current_version="$($BINARY --version 2>/dev/null || echo 'unknown')"
         warn "Existing installation found: ${current_version}"
-        if [ "${AUXLOCLAW_SKIP_CONFIRM:-0}" != "1" ]; then
+        if [ "${ahnara_SKIP_CONFIRM:-0}" != "1" ]; then
             if [ -t 0 ]; then
                 # stdin is a terminal -- safe to prompt
                 read -r -p "  Overwrite? [y/N] " answer </dev/tty
@@ -337,7 +337,7 @@ main() {
     fi
 
     local version
-    version="${AUXLOCLAW_VERSION:-$(get_latest_version)}"
+    version="${ahnara_VERSION:-$(get_latest_version)}"
 
     if [ -z "$version" ]; then
         warn "No releases found. Will build from source."
@@ -360,7 +360,7 @@ main() {
     if command -v "$BINARY" >/dev/null 2>&1 || [ -x "${INSTALL_DIR}/${BINARY}" ]; then
         local installed_version
         installed_version="$("${INSTALL_DIR}/${BINARY}" --version 2>/dev/null || echo 'installed')"
-        ok "AUXLOCLAW ${installed_version} installed successfully!"
+        ok "ahnara ${installed_version} installed successfully!"
     else
         warn "Binary installed but not found in PATH. You may need to restart your shell."
     fi

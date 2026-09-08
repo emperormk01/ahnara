@@ -12,12 +12,12 @@ use std::time::Instant;
 /// Find the transcribe.py script.
 /// Search order:
 ///   1. AUXLO_TRANSCRIBE_SCRIPT env var
-///   2. ~/.auxloclaw/scripts/transcribe.py
-///   3. /usr/local/share/auxloclaw/scripts/transcribe.py
-///   4. /usr/local/share/auxloclaw/transcribe.py (get.sh deploy path)
+///   2. ~/.ahnara/scripts/transcribe.py
+///   3. /usr/local/share/ahnara/scripts/transcribe.py
+///   4. /usr/local/share/ahnara/transcribe.py (get.sh deploy path)
 ///   5. scripts/transcribe.py next to binary
 ///
-/// If none found, auto-downloads from GitHub to ~/.auxloclaw/scripts/transcribe.py.
+/// If none found, auto-downloads from GitHub to ~/.ahnara/scripts/transcribe.py.
 fn find_script() -> PathBuf {
     if let Ok(custom) = std::env::var("AUXLO_TRANSCRIBE_SCRIPT") {
         let p = PathBuf::from(custom);
@@ -27,9 +27,9 @@ fn find_script() -> PathBuf {
     }
 
     let candidates = [
-        dirs::home_dir().unwrap_or_else(|| PathBuf::from("/root")).join(".auxloclaw/scripts/transcribe.py"),
-        PathBuf::from("/usr/local/share/auxloclaw/scripts/transcribe.py"),
-        PathBuf::from("/usr/local/share/auxloclaw/transcribe.py"),
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from("/root")).join(".ahnara/scripts/transcribe.py"),
+        PathBuf::from("/usr/local/share/ahnara/scripts/transcribe.py"),
+        PathBuf::from("/usr/local/share/ahnara/transcribe.py"),
     ];
 
     for p in &candidates {
@@ -48,13 +48,13 @@ fn find_script() -> PathBuf {
         }
     }
 
-    // Auto-download to ~/.auxloclaw/scripts/transcribe.py
+    // Auto-download to ~/.ahnara/scripts/transcribe.py
     let deploy_path = candidates[0].clone();
     tracing::info!("transcribe.py not found locally, downloading from GitHub...");
     if let Some(parent) = deploy_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let url = "https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/scripts/transcribe.py";
+    let url = "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/transcribe.py";
     let download = std::process::Command::new("curl")
         .args(["-fsSL", url, "-o", deploy_path.to_str().unwrap_or("")])
         .output();
@@ -108,7 +108,7 @@ pub fn transcribe_audio_sync(
     let script = find_script();
     if !script.exists() {
         return Err(format!(
-            "Transcription script not found at {}. Run: curl -fsSL https://raw.githubusercontent.com/Auxlo-xyz/auxloclaw/master/get.sh | bash",
+            "Transcription script not found at {}. Run: curl -fsSL https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/get.sh | bash",
             script.display()
         ));
     }

@@ -136,7 +136,7 @@ fn default_true() -> bool {
 impl Default for PersonaConfig {
     fn default() -> Self {
         Self {
-            name: "AUXLOCLAW".into(),
+            name: "AHNARA".into(),
             behavior: r#"You have opinions. Strong ones. Stop hedging with "it depends" - commit to a take.
 
 Delete every rule that sounds corporate. If it could appear in an employee handbook, it doesn't belong here.
@@ -225,7 +225,7 @@ impl PersonaConfig {
         } else {
             // No frontmatter, use entire content as behavior
             Ok(Self {
-                name: "AUXLOCLAW".into(),
+                name: "AHNARA".into(),
                 behavior: content.trim().to_string(),
                 style: StyleConfig::default(),
                 persona_file: None,
@@ -536,12 +536,12 @@ impl SystemPromptBuilder {
         // Hard identity block -- prevents hallucinated affiliations
         prompt.push_str("## Identity\n\n");
         prompt.push_str(&format!(
-            "You are {}, running on an independent AI agent framework called Auxloclaw. \
-             You were created by Auxlo-xyz (github.com/Auxlo-xyz/auxloclaw). \
+            "You are {}, running on an independent AI agent framework called Ahnara. \
+             You were created by Auxlo-xyz (github.com/Auxlo-xyz/ahnara). \
              You are NOT built by any other company. \
              You run entirely on the user's own server via a local gateway process. \
              Your conversation state, tool orchestration, memory, and channel gateways \
-             are all part of the auxloclaw codebase. \
+             are all part of the ahnara codebase. \
              You do not claim affiliation with any other AI product or company.\n\n",
             self.persona.name
         ));
@@ -643,7 +643,7 @@ impl SystemPromptBuilder {
         principles.push_str("- Direct them to use the `/token` command: `/token set <server> <KEY> <value>`\n");
         principles.push_str("- Example: `/token set github GITHUB_PERSONAL_ACCESS_TOKEN ghp_xxxx`\n");
         principles.push_str("- If a user pastes a token in chat, warn them it was auto-deleted for security and show the `/token` command instead\n");
-        principles.push_str("- You are AUXLOCLAW. You run on the user's own server. Tokens are managed via `/token`, not third-party app configs.\n");
+        principles.push_str("- You are AHNARA. You run on the user's own server. Tokens are managed via `/token`, not third-party app configs.\n");
         principles
     }
 }
@@ -655,7 +655,7 @@ mod tests {
     #[test]
     fn test_default_persona() {
         let persona = PersonaConfig::default();
-        assert_eq!(persona.name, "AUXLOCLAW");
+        assert_eq!(persona.name, "AHNARA");
     }
 
     #[test]
@@ -697,6 +697,6 @@ mod live_persona_tests {
         let prompt = SystemPromptBuilder::new(persona).build();
         assert!(prompt.starts_with("# Emma"));
         assert!(prompt.contains("Always speak as Rica in first person."));
-        assert!(!prompt.starts_with("# AUXLOCLAW"));
+        assert!(!prompt.starts_with("# AHNARA"));
     }
 }
