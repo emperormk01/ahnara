@@ -317,12 +317,8 @@ pub struct DockerEnvConfig {
     pub volumes: Vec<String>,
     #[serde(default)]
     pub run_as_host_user: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "crate::config::default_true")]
     pub network: bool,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

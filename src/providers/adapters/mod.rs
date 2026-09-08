@@ -14,6 +14,7 @@
 pub mod anthropic;
 pub mod gemini;
 pub mod openai;
+#[cfg(test)]
 pub mod adapter_tests;
 
 use crate::providers::{CompletionRequest, CompletionResponse, StreamChunk};

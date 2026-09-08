@@ -109,15 +109,15 @@ impl std::fmt::Display for Tone {
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct FormattingConfig {
     /// Use markdown formatting
-    #[serde(default = "default_true")]
+    #[serde(default = "crate::config::default_true")]
     pub use_markdown: bool,
 
     /// Use code blocks for code
-    #[serde(default = "default_true")]
+    #[serde(default = "crate::config::default_true")]
     pub code_blocks: bool,
 
     /// Use bullet points for lists
-    #[serde(default = "default_true")]
+    #[serde(default = "crate::config::default_true")]
     pub bullet_points: bool,
 
     /// Never use em dashes (—)
@@ -127,10 +127,6 @@ pub struct FormattingConfig {
     /// Never use emojis
     #[serde(default)]
     pub no_emojis: bool,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 const DEFAULT_BEHAVIOR: &str = r#"You have opinions. Strong ones. Stop hedging with "it depends" - commit to a take.

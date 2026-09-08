@@ -42,7 +42,6 @@ pub trait LLMProvider: Send + Sync {
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse>;
     async fn stream(&self, request: CompletionRequest) -> Result<mpsc::Receiver<StreamChunk>>;
-    async fn embed(&self, text: &str) -> Result<Vec<f32>>;
 }
 
 /// Provider pool with user-selectable providers
@@ -429,10 +428,6 @@ impl LLMProvider for OpenAICompatibleProvider {
         let body = adapter.transform_request(&stream_request);
 
         adapter.stream_response(&self.client, &url, headers, body).await
-    }
-
-    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
-        Err(anyhow!("Embedding not implemented"))
     }
 }
 

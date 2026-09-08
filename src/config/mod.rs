@@ -17,7 +17,6 @@ pub struct AppConfig {
     pub providers: ProvidersConfig,
     pub memory: MemoryConfig,
     pub channels: ChannelsConfig,
-    pub tools: ToolsConfig,
     pub mcp: McpConfig,
     pub scheduler: SchedulerConfig,
     pub plugins: PluginsConfig,
@@ -167,9 +166,6 @@ fn default_cache_size() -> usize {
 fn default_db_path() -> String {
     "~/.ahnara/memory.db".into()
 }
-fn default_consolidation() -> u64 {
-    300
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MemoryConfig {
@@ -177,10 +173,6 @@ pub struct MemoryConfig {
     pub hot_cache_size: usize,
     #[serde(default = "default_db_path")]
     pub database_path: String,
-    #[serde(default)]
-    pub embedding_model: Option<String>,
-    #[serde(default = "default_consolidation")]
-    pub consolidation_interval_secs: u64,
     // Compaction settings
     #[serde(default = "default_true")]
     pub compaction_enabled: bool,
@@ -225,8 +217,6 @@ impl Default for MemoryConfig {
         Self {
             hot_cache_size: 1000,
             database_path: "~/.ahnara/memory.db".into(),
-            embedding_model: None,
-            consolidation_interval_secs: 300,
             compaction_enabled: true,
             compaction_threshold: 40,
             compaction_keep_recent: 10,
@@ -244,7 +234,6 @@ impl Default for MemoryConfig {
 pub struct ChannelsConfig {
     pub telegram: TelegramConfig,
     pub discord: DiscordConfig,
-    pub slack: SlackConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -263,14 +252,6 @@ pub struct DiscordConfig {
     pub enabled: bool,
     pub token: String,
     pub allowed_guilds: Vec<u64>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-#[serde(default)]
-pub struct SlackConfig {
-    pub enabled: bool,
-    pub bot_token: String,
-    pub app_token: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -357,43 +338,8 @@ impl Default for ScheduleJobConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ToolsConfig {
-    #[serde(default = "default_true")]
-    pub exec_enabled: bool,
-    #[serde(default = "default_exec_timeout")]
-    pub exec_timeout_secs: u64,
-    #[serde(default = "default_true")]
-    pub restrict_to_workspace: bool,
-    #[serde(default)]
-    pub web_search_enabled: bool,
-    #[serde(default = "default_brave")]
-    pub web_search_provider: String,
-    #[serde(default)]
-    pub web_search_api_key: Option<String>,
-}
-
-fn default_true() -> bool {
+pub(crate) fn default_true() -> bool {
     true
-}
-fn default_exec_timeout() -> u64 {
-    60
-}
-fn default_brave() -> String {
-    "brave".into()
-}
-
-impl Default for ToolsConfig {
-    fn default() -> Self {
-        Self {
-            exec_enabled: true,
-            exec_timeout_secs: 60,
-            restrict_to_workspace: true,
-            web_search_enabled: true,
-            web_search_provider: "brave".into(),
-            web_search_api_key: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -453,8 +399,6 @@ pub struct ServerConfig {
     pub host: String,
     #[serde(default = "default_port")]
     pub port: u16,
-    #[serde(default = "default_true")]
-    pub cors_enabled: bool,
 }
 
 fn default_host() -> String {
@@ -469,7 +413,6 @@ impl Default for ServerConfig {
         Self {
             host: "0.0.0.0".into(),
             port: 18789,
-            cors_enabled: true,
         }
     }
 }

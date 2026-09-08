@@ -21,7 +21,6 @@ mod providers;
 mod runs;
 mod scheduler;
 mod skills;
-mod streaming;
 mod tools;
 
 use crate::checkpoints::CheckpointManager;
@@ -685,11 +684,29 @@ async fn capabilities_handler(State(state): State<AppState>) -> axum::Json<serde
 }
 
 async fn list_skills_handler() -> axum::Json<Vec<String>> {
-    axum::Json(vec![
-        "code-review".into(),
-        "arxiv".into(),
-        "fine-tuning-axolotl".into(),
-    ])
+    let skills_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("ahnara")
+        .join("skills");
+    let mut names = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&skills_dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let skill_file = entry.path().join("SKILL.md");
+            if skill_file.is_file() {
+                if let Ok(content) = std::fs::read_to_string(&skill_file) {
+                    if let Ok(skill) = crate::skills::Skill::parse(&content) {
+                        names.push(skill.name().to_string());
+                        continue;
+                    }
+                }
+                if let Some(name) = entry.file_name().to_str() {
+                    names.push(name.to_string());
+                }
+            }
+        }
+    }
+    names.sort();
+    axum::Json(names)
 }
 
 #[derive(Deserialize)]

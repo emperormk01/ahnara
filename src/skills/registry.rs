@@ -40,7 +40,7 @@ pub struct RegistryManifest {
 pub struct SkillTap {
     pub name: String,
     pub url: String,
-    #[serde(default = "default_true")]
+    #[serde(default = "crate::config::default_true")]
     pub enabled: bool,
     #[serde(default)]
     pub priority: i32,
@@ -52,10 +52,6 @@ pub struct SkillTap {
 pub struct SkillTapConfig {
     pub version: String,
     pub taps: Vec<SkillTap>,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 impl Default for SkillTapConfig {

@@ -7,30 +7,34 @@ default_model = "stepfun-ai/step-3.5-flash"
 max_tokens = 8192
 temperature = 1.0
 max_tool_iterations = 100
+nudge_after_tool_calls = 10
 context_window_tokens = 20000
+recent_history_turns = 60
+tool_output_max_chars = 10000
 timezone = "UTC"
 
 [providers]
+active = ""
 connection_pool_size = 32
-request_timeout_secs = 120
+request_timeout_secs = 60
 
-[providers.primary]
+[[providers.providers]]
 name = "nvidia"
 api_base = "https://integrate.api.nvidia.com/v1"
 api_key = ""  # Set via NVIDIA_API_KEY env var or fill here
 
-# Fallback providers (optional)
-# [[providers.fallbacks]]
+# Fallback providers (optional, same table format)
+# [[providers.providers]]
 # name = "openai"
 # api_base = "https://api.openai.com/v1"
 # api_key = ""  # Set via OPENAI_API_KEY env var
 #
-# [[providers.fallbacks]]
+# [[providers.providers]]
 # name = "anthropic"
 # api_base = "https://api.anthropic.com/v1"
 # api_key = ""  # Set via ANTHROPIC_API_KEY env var
 #
-# [[providers.fallbacks]]
+# [[providers.providers]]
 # name = "gemini"
 # api_base = "https://generativelanguage.googleapis.com/v1beta/openai"
 # api_key = ""  # Set via GOOGLE_AI_STUDIO_KEY env var
@@ -38,8 +42,14 @@ api_key = ""  # Set via NVIDIA_API_KEY env var or fill here
 [memory]
 database_path = "~/.ahnara/memory.db"
 hot_cache_size = 1000
-session_max_messages = 100
-consolidation_interval_secs = 300
+compaction_enabled = true
+compaction_threshold = 40
+compaction_keep_recent = 10
+compaction_cooldown_secs = 300
+reflection_enabled = true
+reflection_min_messages = 5
+reflection_cooldown_secs = 300
+reflection_interval_secs = 300
 
 [channels.telegram]
 enabled = false
@@ -51,19 +61,6 @@ enabled = false
 token = ""  # Set via DISCORD_BOT_TOKEN env var
 allowed_guilds = []
 
-[channels.slack]
-enabled = false
-bot_token = ""
-app_token = ""
-
-[tools]
-exec_enabled = true
-exec_timeout_secs = 60
-restrict_to_workspace = true
-web_search_enabled = true
-web_search_provider = "brave"
-
 [server]
 host = "0.0.0.0"
 port = 18789
-cors_enabled = true

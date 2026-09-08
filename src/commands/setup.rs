@@ -493,19 +493,10 @@ request_timeout_secs = 120
 {}[memory]
 database_path = "~/.ahnara/memory.db"
 hot_cache_size = 1000
-session_max_messages = 100
-consolidation_interval_secs = 300
 
-{}{}[tools]
-exec_enabled = true
-exec_timeout_secs = 60
-restrict_to_workspace = true
-web_search_enabled = true
-web_search_provider = "brave"
-
-[server]
+{}{}[server]
 host = "0.0.0.0"
-port = 3000
+port = 18789
 
 {}"#,
         agent_name, model_line, temperature, provider_block,
@@ -553,13 +544,7 @@ fn generate_discord_block(discord_token: Option<&str>) -> String {
         r#"[channels.discord]
 enabled = {}
 token = "{}"
-group_policy = "mention"
 allowed_guilds = []
-
-[channels.slack]
-enabled = false
-bot_token = ""
-app_token = ""
 
 "#,
         enabled, token

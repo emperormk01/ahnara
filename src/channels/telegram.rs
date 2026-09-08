@@ -188,14 +188,6 @@ impl TelegramState {
         self.agent.has_active_session("telegram-code", &user_id)
     }
 
-    async fn enter_code_mode(&self, _chat_id: i64, _workspace: String) {
-        // Code mode activation is handled by agent.set_system_prompt_override which persists to CodeModeStore
-    }
-
-    async fn exit_code_mode(&self, _chat_id: i64) {
-        // Code mode deactivation is handled by agent.clear_system_prompt_override which removes from CodeModeStore
-    }
-
     /// Reset per-user session stats (token counts, message counts) in the
     /// channel-side `SessionState`. Called by `/clear` and `/new` so a fresh
     /// session starts with zero usage.
@@ -474,7 +466,6 @@ async fn handle_code_cmd(state: &TelegramState, chat_id: i64) -> String {
     let code_prompt = crate::commands::code::build_code_system_prompt(&workspace);
     state.agent.set_session_context("telegram", &user_id).await;
     state.agent.set_system_prompt_override(&session_id, code_prompt).await;
-    state.enter_code_mode(chat_id, workspace.display().to_string()).await;
     format!(
         "Coding mode activated.\nWorkspace: {}\n\nSend your coding task as the next message. Use /normal to exit coding mode.",
         workspace.display()
@@ -874,7 +865,6 @@ async fn handle_message(bot: Bot, msg: Message, state: Arc<TelegramState>) -> Re
     }
 
     if text.trim() == "/normal" {
-        state.exit_code_mode(chat_id).await;
         let user_id = format!("{}", chat_id);
         let code_session = state.agent.get_or_create_session_id("telegram-code", &user_id);
         state.agent.clear_system_prompt_override(&code_session).await;

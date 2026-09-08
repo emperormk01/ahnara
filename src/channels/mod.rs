@@ -1,4 +1,4 @@
-//! Channel adapters: Telegram, Discord, Slack, CLI
+//! Channel adapters: Telegram, Discord, CLI
 
 pub mod telegram;
 pub mod discord;
