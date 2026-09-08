@@ -55,99 +55,126 @@ impl ProviderAdapter for AnthropicAdapter {
         for msg in &request.messages {
             match msg.role.as_str() {
                 "system" => {
-                    if let Some(ref c) = msg.content {
-                        if !system_content.is_empty() {
-                            system_content.push_str("\n\n");
-                        }
-                        system_content.push_str(c);
-                    }
+                    self.append_system_content(&mut system_content, msg);
                 }
                 "user" => {
-                    if let Some(ref parts) = msg.content_parts {
-                        // Multimodal: transform to Anthropic content blocks
-                        let mut blocks: Vec<Value> = Vec::new();
-                        for part in parts {
-                            match part {
-                                crate::providers::ContentPart::Text { text } => {
-                                    blocks.push(serde_json::json!({"type": "text", "text": text}));
-                                }
-                                crate::providers::ContentPart::ImageUrl { image_url } => {
-                                    let url = &image_url.url;
-                                    // Parse data URL: "data:image/png;base64,<data>"
-                                    if let Some(rest) = url.strip_prefix("data:") {
-                                        let (media_type, data) = rest.split_once(";base64,").unwrap_or(("application/octet-stream", url.as_str()));
-                                        blocks.push(serde_json::json!({
-                                            "type": "image",
-                                            "source": {
-                                                "type": "base64",
-                                                "media_type": media_type,
-                                                "data": data,
-                                            }
-                                        }));
-                                    }
-                                }
-                            }
-                        }
-                        messages.push(serde_json::json!({"role": "user", "content": blocks}));
-                    } else {
-                        let content = msg.content.as_deref().unwrap_or("");
-                        messages.push(serde_json::json!({"role": "user", "content": content}));
-                    }
+                    messages.push(self.transform_user_message(msg));
                 }
                 "assistant" => {
-                    if let Some(ref tool_calls) = msg.tool_calls {
-                        let mut content_blocks: Vec<Value> = Vec::new();
-                        if let Some(ref text) = msg.content {
-                            if !text.is_empty() {
-                                content_blocks.push(serde_json::json!({
-                                    "type": "text",
-                                    "text": text,
-                                }));
-                            }
-                        }
-                        for tc in tool_calls {
-                            let args: Value = serde_json::from_str(&tc.function.arguments)
-                                .unwrap_or(Value::Object(serde_json::Map::new()));
-                            content_blocks.push(serde_json::json!({
-                                "type": "tool_use",
-                                "id": tc.id,
-                                "name": tc.function.name,
-                                "input": args,
-                            }));
-                        }
-                        messages.push(serde_json::json!({
-                            "role": "assistant",
-                            "content": content_blocks,
-                        }));
-                    } else {
-                        let content = msg.content.as_deref().unwrap_or("");
-                        messages.push(serde_json::json!({
-                            "role": "assistant",
-                            "content": content,
-                        }));
-                    }
-                }
-                "tool" => {
-                    let tool_call_id = msg.tool_call_id.as_deref().unwrap_or("");
-                    let content = msg.content.as_deref().unwrap_or("");
-                    messages.push(serde_json::json!({
-                        "role": "user",
-                        "content": [{
-                            "type": "tool_result",
-                            "tool_use_id": tool_call_id,
-                            "content": content,
-                        }],
-                    }));
+                    messages.push(self.transform_assistant_message(msg));
                 }
                 _ => {}
             }
         }
 
-        if system_content.is_empty() {
-            system_content = "You are a helpful assistant.".to_string();
+        let mut body = serde_json::json!({
+            "model": request.model,
+            "max_tokens": request.max_tokens.unwrap_or(4096),
+            "messages": messages,
+        });
+
+        if !system_content.is_empty() {
+            body["system"] = serde_json::json!(system_content);
         }
 
-        let mut body = serde_json::json!({
+        if let Some(temperature) = request.temperature {
+            body["temperature"] = serde_json::json!(temperature);
+        }
+
+        if let Some(tools) = &request.tools {
+            if !tools.is_empty() {
+                let anthropic_tools: Vec<Value> = tools.iter().map(|t| {
+                    serde_json::json!({
+                        "name": t.function.name,
+                        "description": t.function.description,
+                        "input_schema": t.function.parameters,
+                    })
+                }).collect();
+                body["tools"] = serde_json::json!(anthropic_tools);
+            }
+        }
+
+        body
+    }
+
+    fn append_system_content(&self, system_content: &mut String, msg: &crate::providers::Message) {
+        if let Some(ref c) = msg.content {
+            if !system_content.is_empty() {
+                system_content.push_str("\n\n");
+            }
+            system_content.push_str(c);
+        }
+    }
+
+    fn transform_user_message(&self, msg: &crate::providers::Message) -> Value {
+        if let Some(ref parts) = msg.content_parts {
+            let blocks: Vec<Value> = parts.iter().map(|part| {
+                match part {
+                    crate::providers::ContentPart::Text { text } => {
+                        serde_json::json!({"type": "text", "text": text})
+                    }
+                    crate::providers::ContentPart::ImageUrl { image_url } => {
+                        self.transform_image_part(&image_url.url)
+                    }
+                }
+            }).collect();
+            serde_json::json!({"role": "user", "content": blocks})
+        } else {
+            let content = msg.content.as_deref().unwrap_or("");
+            serde_json::json!({"role": "user", "content": content})
+        }
+    }
+
+    fn transform_image_part(&self, url: &str) -> Value {
+        if let Some(rest) = url.strip_prefix("data:") {
+            let (media_type, data) = rest.split_once(";base64,").unwrap_or(("application/octet-stream", url));
+            serde_json::json!({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": data,
+                }
+            })
+        } else {
+            serde_json::json!({"type": "text", "text": "[Image URL: {}]", url})
+        }
+    }
+
+    fn transform_assistant_message(&self, msg: &crate::providers::Message) -> Value {
+        if let Some(ref tool_calls) = msg.tool_calls {
+            let mut content_blocks: Vec<Value> = Vec::new();
+            if let Some(ref text) = msg.content {
+                if !text.is_empty() {
+                    content_blocks.push(serde_json::json!({
+                        "type": "text",
+                        "text": text,
+                    }));
+                }
+            }
+            for tc in tool_calls {
+                let args: Value = serde_json::from_str(&tc.function.arguments)
+                    .unwrap_or(Value::Object(serde_json::Map::new()));
+                content_blocks.push(serde_json::json!({
+                    "type": "tool_use",
+                    "id": tc.id,
+                    "name": tc.function.name,
+                    "input": args,
+                }));
+            }
+            serde_json::json!({
+                "role": "assistant",
+                "content": content_blocks,
+            })
+        } else {
+            let content = msg.content.as_deref().unwrap_or("");
+            serde_json::json!({
+                "role": "assistant",
+                "content": content,
+            })
+        }
+    }
+}
             "model": request.model,
             "system": system_content,
             "messages": messages,
@@ -276,59 +303,57 @@ impl ProviderAdapter for AnthropicAdapter {
                 tracing::error!("Anthropic stream HTTP {}", response.status());
                 return;
             }
-            let mut stream = response.bytes_stream();
-            while let Some(chunk) = stream.next().await {
-                if let Ok(bytes) = chunk {
-                    let text = String::from_utf8_lossy(&bytes);
-                    for line in text.lines() {
-                        if let Some(data) = line.strip_prefix("data: ") {
-                            if data == "[DONE]" {
-                                let _ = tx
-                                    .send(StreamChunk {
-                                        id: None,
-                                        choices: vec![],
-                                        done: true,
-                                    })
-                                    .await;
-                                return;
-                            }
-                            if let Ok(event) = serde_json::from_str::<Value>(data) {
-                                if event.get("type").and_then(|t| t.as_str()) == Some("content_block_delta") {
-                                    if let Some(delta) = event.get("delta") {
-                                        if let Some(text_val) = delta.get("text").and_then(|t| t.as_str()) {
-                                            let _ = tx
-                                                .send(StreamChunk {
-                                                    id: None,
-                                                    choices: vec![crate::providers::StreamChoice {
-                                                        index: 0,
-                                                        delta: crate::providers::StreamDelta {
-                                                            content: text_val.to_string(),
-                                                            tool_calls: None,
-                                                        },
-                                                        finish_reason: None,
-                                                    }],
-                                                    done: false,
-                                                })
-                                                .await;
-                                        }
-                                    }
-                                } else if event.get("type").and_then(|t| t.as_str()) == Some("message_stop") {
-                                    let _ = tx
-                                        .send(StreamChunk {
-                                            id: None,
-                                            choices: vec![],
-                                            done: true,
-                                        })
-                                        .await;
-                                    return;
-                                }
-                            }
+            Self::process_stream(response.bytes_stream(), tx).await;
+        });
+
+        Ok(rx)
+    }
+
+    async fn process_stream(stream: impl StreamExt<Item = Result<bytes::Bytes, reqwest::Error>>, tx: mpsc::Sender<StreamChunk>) {
+        let mut stream = stream;
+        while let Some(chunk) = stream.next().await {
+            if let Ok(bytes) = chunk {
+                let text = String::from_utf8_lossy(&bytes);
+                for line in text.lines() {
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        if data == "[DONE]" {
+                            let _ = tx.send(StreamChunk { id: None, choices: vec![], done: true }).await;
+                            return;
+                        }
+                        if let Ok(event) = serde_json::from_str::<Value>(data) {
+                            Self::process_stream_event(&event, &tx).await;
                         }
                     }
                 }
             }
-        });
+        }
+    }
 
-        Ok(rx)
+    async fn process_stream_event(event: &Value, tx: &mpsc::Sender<StreamChunk>) {
+        if let Some(event_type) = event.get("type").and_then(|t| t.as_str()) {
+            match event_type {
+                "content_block_delta" => {
+                    if let Some(text_val) = event.get("delta").and_then(|d| d.get("text")).and_then(|t| t.as_str()) {
+                        let _ = tx.send(StreamChunk {
+                            id: None,
+                            choices: vec![crate::providers::StreamChoice {
+                                index: 0,
+                                delta: crate::providers::StreamDelta {
+                                    content: text_val.to_string(),
+                                    tool_calls: None,
+                                },
+                                finish_reason: None,
+                            }],
+                            done: false,
+                        }).await;
+                    }
+                }
+                "message_stop" => {
+                    let _ = tx.send(StreamChunk { id: None, choices: vec![], done: true }).await;
+                }
+                _ => {}
+            }
+        }
+    }
     }
 }

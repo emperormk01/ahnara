@@ -31,31 +31,8 @@ impl Tool for HttpFetchTool {
  let url_str = args["url"].as_str()
  .ok_or_else(|| anyhow!("Missing url parameter"))?;
 
- // SSRF Protection: Only allow http/https and block private/localhost IPs
- if let Ok(parsed) = reqwest::Url::parse(url_str) {
-     let scheme = parsed.scheme();
-     if scheme != "http" && scheme != "https" {
-         return Ok(ToolResult { tool_name: self.name().into(), success: false, output: serde_json::Value::Null, error: Some(format!("Blocked scheme: {}", scheme)), duration_ms: 0 });
-     }
-     if let Some(host) = parsed.host_str() {
-         if host == "localhost" || host.ends_with(".localhost") || host == "127.0.0.1" || host == "::1" {
-             return Ok(ToolResult { tool_name: self.name().into(), success: false, output: serde_json::Value::Null, error: Some("Blocked localhost access".into()), duration_ms: 0 });
-         }
-         // Basic private IP check
-         if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-             match ip {
-                 std::net::IpAddr::V4(ipv4) if ipv4.is_private() || ipv4.is_loopback() || ipv4.is_link_local() || ipv4.is_unspecified() => {
-                     return Ok(ToolResult { tool_name: self.name().into(), success: false, output: serde_json::Value::Null, error: Some("Blocked private IP access".into()), duration_ms: 0 });
-                 }
-                 std::net::IpAddr::V6(ipv6) if ipv6.is_loopback() || ipv6.is_unspecified() => {
-                     return Ok(ToolResult { tool_name: self.name().into(), success: false, output: serde_json::Value::Null, error: Some("Blocked IPv6 loopback".into()), duration_ms: 0 });
-                 }
-                 _ => {}
-             }
-         }
-     }
- } else {
-     return Ok(ToolResult { tool_name: self.name().into(), success: false, output: serde_json::Value::Null, error: Some("Invalid URL".into()), duration_ms: 0 });
+ if let Some(error) = validate_url(url_str) {
+     return Ok(ToolResult { tool_name: self.name().into(), success: false, output: serde_json::Value::Null, error: Some(error), duration_ms: 0 });
  }
 
  let response = self.client.get(url_str).send().await
@@ -76,6 +53,30 @@ impl Tool for HttpFetchTool {
  duration_ms: 0,
  })
  }
+}
+
+fn validate_url(url_str: &str) -> Option<String> {
+    let parsed = reqwest::Url::parse(url_str).ok()?;
+    let scheme = parsed.scheme();
+    if scheme != "http" && scheme != "https" {
+        return Some(format!("Blocked scheme: {}", scheme));
+    }
+    let host = parsed.host_str()?;
+    if host == "localhost" || host.ends_with(".localhost") || host == "127.0.0.1" || host == "::1" {
+        return Some("Blocked localhost access".into());
+    }
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        match ip {
+            std::net::IpAddr::V4(ipv4) if ipv4.is_private() || ipv4.is_loopback() || ipv4.is_link_local() || ipv4.is_unspecified() => {
+                return Some("Blocked private IP access".into());
+            }
+            std::net::IpAddr::V6(ipv6) if ipv6.is_loopback() || ipv6.is_unspecified() => {
+                return Some("Blocked IPv6 loopback".into());
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 // Script execution tool - DISABLED FOR SECURITY

@@ -512,53 +512,42 @@ impl SkillRegistry {
         path: &str,
         skill_dir: &std::path::Path,
     ) -> Result<()> {
-        // Try to fetch scripts directory
-        let scripts_url = format!(
-            "https://api.github.com/repos/{}/{}/contents/{}/scripts",
-            owner, repo, path
+        self.fetch_directory(owner, repo, path, "scripts", skill_dir).await?;
+        self.fetch_directory(owner, repo, path, "references", skill_dir).await?;
+        Ok(())
+    }
+
+    async fn fetch_directory(
+        &self,
+        owner: &str,
+        repo: &str,
+        path: &str,
+        dir_name: &str,
+        skill_dir: &std::path::Path,
+    ) -> Result<()> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/contents/{}/{}",
+            owner, repo, path, dir_name
         );
 
-        if let Ok(response) = self.client.get(&scripts_url).send().await {
-            if response.status().is_success() {
-                if let Ok(files) = response.json::<Vec<GitHubContent>>().await {
-                    std::fs::create_dir_all(skill_dir.join("scripts"))?;
+        let response = match self.client.get(&url).send().await {
+            Ok(r) if r.status().is_success() => r,
+            _ => return Ok(()),
+        };
 
-                    for file in files {
-                        if file.r#type == "file" {
-                            if let Ok(content) = self.fetch_file_content(&file.download_url).await {
-                                std::fs::write(
-                                    skill_dir.join("scripts").join(&file.name),
-                                    content,
-                                )?;
-                            }
-                        }
-                    }
-                }
+        let files: Vec<GitHubContent> = match response.json().await {
+            Ok(f) => f,
+            Err(_) => return Ok(()),
+        };
+
+        std::fs::create_dir_all(skill_dir.join(dir_name))?;
+
+        for file in files {
+            if file.r#type != "file" {
+                continue;
             }
-        }
-
-        // Try to fetch references directory
-        let refs_url = format!(
-            "https://api.github.com/repos/{}/{}/contents/{}/references",
-            owner, repo, path
-        );
-
-        if let Ok(response) = self.client.get(&refs_url).send().await {
-            if response.status().is_success() {
-                if let Ok(files) = response.json::<Vec<GitHubContent>>().await {
-                    std::fs::create_dir_all(skill_dir.join("references"))?;
-
-                    for file in files {
-                        if file.r#type == "file" {
-                            if let Ok(content) = self.fetch_file_content(&file.download_url).await {
-                                std::fs::write(
-                                    skill_dir.join("references").join(&file.name),
-                                    content,
-                                )?;
-                            }
-                        }
-                    }
-                }
+            if let Ok(content) = self.fetch_file_content(&file.download_url).await {
+                std::fs::write(skill_dir.join(dir_name).join(&file.name), content)?;
             }
         }
 

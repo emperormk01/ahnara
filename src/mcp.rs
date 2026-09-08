@@ -173,13 +173,19 @@ impl McpClient {
         payload: Value,
         expected_id: Option<u64>,
     ) -> Result<McpResponse> {
-        {
-            let mut stdin = self.inner.stdin.lock().await;
-            stdin.write_all(payload.to_string().as_bytes()).await?;
-            stdin.write_all(b"\n").await?;
-            stdin.flush().await?;
-        }
+        self.send_payload(payload).await?;
+        self.read_response(expected_id).await
+    }
 
+    async fn send_payload(&self, payload: Value) -> Result<()> {
+        let mut stdin = self.inner.stdin.lock().await;
+        stdin.write_all(payload.to_string().as_bytes()).await?;
+        stdin.write_all(b"\n").await?;
+        stdin.flush().await?;
+        Ok(())
+    }
+
+    async fn read_response(&self, expected_id: Option<u64>) -> Result<McpResponse> {
         let mut reader = self.inner.reader.lock().await;
         loop {
             let mut line = String::new();
@@ -193,12 +199,16 @@ impl McpClient {
             }
             let response: McpResponse = serde_json::from_str(trimmed)
                 .with_context(|| format!("invalid MCP response from {}", self.inner.name))?;
-            if let Some(expected) = expected_id {
-                if response.id.as_ref().and_then(Value::as_u64) != Some(expected) {
-                    continue;
-                }
+            if self.response_matches_expected(&response, expected_id) {
+                return Ok(response);
             }
-            return Ok(response);
+        }
+    }
+
+    fn response_matches_expected(&self, response: &McpResponse, expected_id: Option<u64>) -> bool {
+        match expected_id {
+            Some(expected) => response.id.as_ref().and_then(Value::as_u64) == Some(expected),
+            None => true,
         }
     }
 

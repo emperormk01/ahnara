@@ -100,14 +100,22 @@ impl Environment for LocalEnvironment {
         stdin_data: Option<&str>,
     ) -> Result<(String, i32)> {
         let safe_cwd = Self::resolve_safe_cwd(&self.cwd);
+        let mut cmd = self.build_command(script, login, &safe_cwd, stdin_data);
+        self.apply_environment(&mut cmd);
 
+        let child = cmd.spawn().context("Failed to spawn bash process")?;
+        let output = tokio::time::timeout(timeout, self.run_child(child, stdin_data)).await;
+        self.handle_output(output)
+    }
+
+    fn build_command(&self, script: &str, login: bool, safe_cwd: &std::path::Path, stdin_data: Option<&str>) -> Command {
         let mut cmd = Command::new("bash");
         if login {
             cmd.arg("-l");
         }
         cmd.arg("-c")
             .arg(script)
-            .current_dir(&safe_cwd)
+            .current_dir(safe_cwd)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .stdin(if stdin_data.is_some() {
@@ -115,43 +123,34 @@ impl Environment for LocalEnvironment {
             } else {
                 Stdio::null()
             })
-            // Create new process group so we can kill all children on timeout
             .process_group(0);
+        cmd
+    }
 
-        // Apply sanitized environment: clear all, then set allowed vars + extras
+    fn apply_environment(&self, cmd: &mut Command) {
         cmd.env_clear();
-        // Pass through only explicitly allowed vars
         for (key, value) in std::env::vars() {
             if self.allowed.contains(key.as_str()) {
                 cmd.env(&key, &value);
             }
         }
-        // Apply additional env from config (user-explicit, always allowed)
         for (key, value) in &self.env {
             cmd.env(key, value);
         }
+    }
 
-        let start = std::time::Instant::now();
-
-        // Spawn with timeout
-        let child = cmd
-            .spawn()
-            .context("Failed to spawn bash process")?;
-
-        let output = tokio::time::timeout(timeout, async {
-            let mut child = child;
-            // Write stdin data if provided
-            if let Some(data) = stdin_data {
-                if let Some(ref mut stdin) = child.stdin {
-                    use tokio::io::AsyncWriteExt;
-                    let _ = stdin.write_all(data.as_bytes()).await;
-                    drop(child.stdin.take());
-                }
+    async fn run_child(&self, mut child: std::process::Child, stdin_data: Option<&str>) -> Result<std::process::Output> {
+        if let Some(data) = stdin_data {
+            if let Some(ref mut stdin) = child.stdin {
+                use tokio::io::AsyncWriteExt;
+                let _ = stdin.write_all(data.as_bytes()).await;
+                drop(child.stdin.take());
             }
-            child.wait_with_output().await
-        })
-        .await;
+        }
+        child.wait_with_output().await.map_err(|e| anyhow::anyhow!("Process error: {}", e))
+    }
 
+    fn handle_output(&self, output: Result<Result<std::process::Output, std::io::Error>, tokio::time::error::Elapsed>) -> Result<(String, i32)> {
         match output {
             Ok(Ok(output)) => {
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -167,21 +166,14 @@ impl Environment for LocalEnvironment {
                 Ok((combined, exit_code))
             }
             Ok(Err(e)) => Err(anyhow::anyhow!("Process error: {}", e)),
-            Err(_) => {
-                // Timeout: kill the process group
-                // The process_group(0) above means -pid kills all children
-                // We can't easily get the pid here, but the Drop impl
-                // of the tokio Child will send SIGKILL
-                Err(anyhow::anyhow!(
-                    "Command timed out after {}s",
-                    timeout.as_secs()
-                ))
-            }
+            Err(_) => Err(anyhow::anyhow!(
+                "Command timed out after {}s",
+                timeout.as_secs()
+            )),
         }
     }
 
     async fn cleanup(&self) -> Result<()> {
-        // Nothing to clean up for local environment
         Ok(())
     }
 

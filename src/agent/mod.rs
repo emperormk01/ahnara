@@ -472,7 +472,6 @@ impl AgentCore {
             )
             .await;
 
-        // Build provider request context with bounded history and reflections.
         let history = self.get_history(&session_key).await;
         let reflections = self.get_reflections(&session_key).unwrap_or_else(Vec::new);
 
@@ -480,61 +479,11 @@ impl AgentCore {
         tracing::debug!("=== SYSTEM PROMPT START (first 500 chars) ===");
         tracing::debug!("{}", &system_prompt[..system_prompt.len().min(500)]);
         tracing::debug!("=== SYSTEM PROMPT END ===");
-        if !reflections.is_empty() {
-            system_prompt.push_str("\n\n## Your Memory\n\nYou remember the following from past conversations with this user. This is not reference material -- these are things you experienced and learned firsthand. Speak and act accordingly. If you learned something didn't work, don't repeat it. If the user told you their preference, you already know it. If a task was left unfinished, you know what remains.\n");
-            for reflection in reflections.iter().take(3) {
-                let r = reflection;
-                let outcome = match r.completed.as_str() {
-                    "true" => "This was completed.",
-                    "false" => "This was NOT finished.",
-                    "partial" => "This was partially done.",
-                    other => other,
-                };
-                let next = if !r.next_steps.is_empty() {
-                    format!("\nStill remaining: {}", r.next_steps.join("; "))
-                } else {
-                    String::new()
-                };
-                let behavioral = r.behavioral_note.as_ref().map(|n| format!("\nThe user was clear about this: {}", n)).unwrap_or_default();
-                let avoid = r.approach_that_failed.as_ref().map(|a| format!("\nWhat didn't work: {}", a)).unwrap_or_default();
-                let use_str = r.approach_that_worked.as_ref().map(|a| format!("\nWhat worked: {}", a)).unwrap_or_default();
-                let prefs = r.user_preferences.as_ref().map(|p| format!("\nTheir preferences: {}", p)).unwrap_or_default();
-                let evidence = r.evidence.as_ref().map(|e| format!("\nEvidence: {}", e)).unwrap_or_default();
-                system_prompt.push_str(&format!(
-                    "\n**{}** -- The user was trying to: {}. {}{}{}{}{}{}{}",
-                    r.title, r.user_goal, outcome, next, behavioral, avoid, use_str, prefs, evidence,
-                ));
-                system_prompt.push('\n');
-            }
-        }
+        
+        self.append_reflections(&mut system_prompt, &reflections);
+        self.append_scheduled_jobs(&mut system_prompt);
 
-        // Inject active scheduled jobs status
-        if let Some(ref log) = self.schedule_log {
-            if let Ok(guard) = log.read() {
-                if !guard.is_empty() {
-                    let now = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-                    system_prompt.push_str("\n\n## Your Scheduled Jobs\n\nYou have set up these recurring tasks. You remember creating them and you are aware of their recent status.\n");
-                    for entry in guard.values() {
-                        let status = if entry.last_run_at == 0 {
-                            "never ran".to_string()
-                        } else {
-                            let ago = format_duration(now.saturating_sub(entry.last_run_at));
-                            let outcome = if entry.last_success { "success" } else { "failed" };
-                            format!("{} ago | {} | run #{}", ago, outcome, entry.run_count)
-                        };
-                        let result_line = if !entry.last_result_summary.is_empty() {
-                            format!("\n  Result: \"{}\"", entry.last_result_summary)
-                        } else {
-                            String::new()
-                        };
-                        let enabled_str = if entry.enabled { "" } else { " [DISABLED]" };
-                        system_prompt.push_str(&format!(
-                            "\n- {}{} (cron: {})\n  Task: \"{}\"\n  Status: {}{}",
-                            entry.name, enabled_str, entry.cron, entry.prompt_summary, status, result_line,
-                        ));
+        // Build provider request
                         system_prompt.push('\n');
                     }
                 }
@@ -736,6 +685,74 @@ impl AgentCore {
                 "Tool error: {}",
                 result.error.as_ref().unwrap_or(&"Unknown error".into())
             )
+        }
+    }
+
+    fn append_reflections(&self, system_prompt: &mut String, reflections: &[super::memory::reflector::Reflection]) {
+        if reflections.is_empty() {
+            return;
+        }
+        system_prompt.push_str("\n\n## Your Memory\n\nYou remember the following from past conversations with this user. This is not reference material -- these are things you experienced and learned firsthand. Speak and act accordingly. If you learned something didn't work, don't repeat it. If the user told you their preference, you already know it. If a task was left unfinished, you know what remains.\n");
+        for r in reflections.iter().take(3) {
+            let outcome = match r.completed.as_str() {
+                "true" => "This was completed.",
+                "false" => "This was NOT finished.",
+                "partial" => "This was partially done.",
+                other => other,
+            };
+            let next = if !r.next_steps.is_empty() {
+                format!("\nStill remaining: {}", r.next_steps.join("; "))
+            } else {
+                String::new()
+            };
+            let behavioral = r.behavioral_note.as_ref().map(|n| format!("\nThe user was clear about this: {}", n)).unwrap_or_default();
+            let avoid = r.approach_that_failed.as_ref().map(|a| format!("\nWhat didn't work: {}", a)).unwrap_or_default();
+            let use_str = r.approach_that_worked.as_ref().map(|a| format!("\nWhat worked: {}", a)).unwrap_or_default();
+            let prefs = r.user_preferences.as_ref().map(|p| format!("\nTheir preferences: {}", p)).unwrap_or_default();
+            let evidence = r.evidence.as_ref().map(|e| format!("\nEvidence: {}", e)).unwrap_or_default();
+            system_prompt.push_str(&format!(
+                "\n**{}** -- The user was trying to: {}. {}{}{}{}{}{}{}",
+                r.title, r.user_goal, outcome, next, behavioral, avoid, use_str, prefs, evidence,
+            ));
+            system_prompt.push('\n');
+        }
+    }
+
+    fn append_scheduled_jobs(&self, system_prompt: &mut String) {
+        let log = match &self.schedule_log {
+            Some(log) => log,
+            None => return,
+        };
+        let guard = match log.read() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        if guard.is_empty() {
+            return;
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        system_prompt.push_str("\n\n## Your Scheduled Jobs\n\nYou have set up these recurring tasks. You remember creating them and you are aware of their recent status.\n");
+        for entry in guard.values() {
+            let status = if entry.last_run_at == 0 {
+                "never ran".to_string()
+            } else {
+                let ago = format_duration(now.saturating_sub(entry.last_run_at));
+                let outcome = if entry.last_success { "success" } else { "failed" };
+                format!("{} ago | {} | run #{}", ago, outcome, entry.run_count)
+            };
+            let result_line = if !entry.last_result_summary.is_empty() {
+                format!("\n  Result: \"{}\"", entry.last_result_summary)
+            } else {
+                String::new()
+            };
+            let enabled_str = if entry.enabled { "" } else { " [DISABLED]" };
+            system_prompt.push_str(&format!(
+                "\n- {}{} (cron: {})\n  Task: \"{}\"\n  Status: {}{}",
+                entry.name, enabled_str, entry.cron, entry.prompt_summary, status, result_line,
+            ));
         }
     }
 

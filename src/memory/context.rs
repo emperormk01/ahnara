@@ -25,37 +25,10 @@ impl ContextIndex {
     pub fn generate(&self, user_id: Option<&str>) -> Result<String> {
         let mut sections = Vec::new();
 
-        // 1. Recent reflections (last 5, any session)
-        let reflections = self.store.get_reflections(None, 5)?;
-        if !reflections.is_empty() {
-            sections.push(Self::format_reflections(&reflections));
-        }
-
-        // 2. Confirmed preferences (confidence >= 0.8)
-        if let Some(uid) = user_id {
-            let prefs = self.store.get_preferences(Some(uid))?;
-            let confirmed: Vec<_> = prefs
-                .into_iter()
-                .filter(|p| p.confidence >= 0.8)
-                .collect();
-            if !confirmed.is_empty() {
-                sections.push(Self::format_preferences(&confirmed));
-            }
-        }
-
-        // 3. Key facts
-        let facts = self.store.list_facts()?;
-        if !facts.is_empty() {
-            sections.push(Self::format_facts(&facts));
-        }
-
-        // 4. Recent observations by type
-        for obs_type in &["decision", "gotcha", "how_it_works"] {
-            let obs = self.store.get_observations_by_type(obs_type, 3)?;
-            if !obs.is_empty() {
-                sections.push(Self::format_observations(obs_type, &obs));
-            }
-        }
+        self.collect_reflections(&mut sections)?;
+        self.collect_preferences(user_id, &mut sections)?;
+        self.collect_facts(&mut sections)?;
+        self.collect_observations(&mut sections)?;
 
         if sections.is_empty() {
             return Ok(String::new());
@@ -65,6 +38,48 @@ impl ContextIndex {
             "[CROSS-SESSION MEMORY]\n{}\n[END MEMORY]",
             sections.join("\n\n")
         ))
+    }
+
+    fn collect_reflections(&self, sections: &mut Vec<String>) -> Result<()> {
+        let reflections = self.store.get_reflections(None, 5)?;
+        if !reflections.is_empty() {
+            sections.push(Self::format_reflections(&reflections));
+        }
+        Ok(())
+    }
+
+    fn collect_preferences(&self, user_id: Option<&str>, sections: &mut Vec<String>) -> Result<()> {
+        let uid = match user_id {
+            Some(u) => u,
+            None => return Ok(()),
+        };
+        let prefs = self.store.get_preferences(Some(uid))?;
+        let confirmed: Vec<_> = prefs
+            .into_iter()
+            .filter(|p| p.confidence >= 0.8)
+            .collect();
+        if !confirmed.is_empty() {
+            sections.push(Self::format_preferences(&confirmed));
+        }
+        Ok(())
+    }
+
+    fn collect_facts(&self, sections: &mut Vec<String>) -> Result<()> {
+        let facts = self.store.list_facts()?;
+        if !facts.is_empty() {
+            sections.push(Self::format_facts(&facts));
+        }
+        Ok(())
+    }
+
+    fn collect_observations(&self, sections: &mut Vec<String>) -> Result<()> {
+        for obs_type in &["decision", "gotcha", "how_it_works"] {
+            let obs = self.store.get_observations_by_type(obs_type, 3)?;
+            if !obs.is_empty() {
+                sections.push(Self::format_observations(obs_type, &obs));
+            }
+        }
+        Ok(())
     }
 
     fn format_reflections(reflections: &[Reflection]) -> String {

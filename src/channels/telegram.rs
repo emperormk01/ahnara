@@ -357,187 +357,282 @@ async fn handle_command(
     let _typing_guard = spawn_typing_loop(&bot, chat_id);
 
     let response = match cmd {
-        Command::Memory => {
-            let text = msg.text().unwrap_or("/memory");
-            state.agent.handle_memory_text(text).await
-        }
-        Command::Clear => {
-            let user_id = format!("{}", chat_id);
-            let session_id = state.agent.get_or_create_session_id("telegram", &user_id);
-            state.agent.clear_session(&session_id).await;
-            state.agent.reset_session_routing("telegram", &user_id);
-            state.clear_session(chat_id).await;
-            "Session cleared".to_string()
-        }
-        Command::Tools => {
-            let tools = state.agent.list_tools();
-            let mut list = String::from("Available tools\n\n");
-            for tool in tools {
-                list.push_str(&format!("- {}: {}\n", tool.name, tool.description));
-            }
-            list
-        }
-        Command::Usage => {
-            let session = state.get_or_create_session(chat_id).await;
-            let usage = state.agent.get_usage_stats().await;
-            format!(
-                "Current session\nMessages: {}\nTotal tokens: {}\nPrompt tokens: {}\nCompletion tokens: {}\n\nAll-time\nMessages: {}\nTokens: {}",
-                session.message_count,
-                session.total_tokens,
-                session.prompt_tokens,
-                session.completion_tokens,
-                usage.total_messages,
-                usage.total_tokens,
-            )
-        }
-        Command::Recover => {
-            let user_id = format!("{}", chat_id);
-            let session_id = state.agent.get_or_create_session_id("telegram", &user_id);
-            let _ = state
-                .agent
-                .recover_session(&session_id)
-                .await;
-            "Session recovered".to_string()
-        }
-        Command::Help => {
-            "Commands: /memory /clear /tools /usage /recover /status /voice /persona /new /update /code /normal"
-                .to_string()
-        }
-        Command::Status => {
-            let session = state.get_or_create_session(chat_id).await;
-            let uptime = chrono::Utc::now() - session.created_at;
-            format!(
-                "Status: Online\nUptime: {}h {}m\nActive chats: {}\nModel: {}\nVoice mode: {}",
-                uptime.num_hours(),
-                uptime.num_minutes() % 60,
-                state.sessions.read().await.len(),
-                state.agent.model_name(),
-                if session.voice_mode { "ON" } else { "OFF" },
-            )
-        }
-        Command::Voice => {
-            let mut sessions = state.sessions.write().await;
-            let session = sessions.entry(chat_id).or_default();
-            session.voice_mode = !session.voice_mode;
-            format!(
-                "Voice mode {}",
-                if session.voice_mode { "ON" } else { "OFF" }
-            )
-        }
+        Command::Memory => handle_memory_cmd(&state, msg.text().unwrap_or("/memory")).await,
+        Command::Clear => handle_clear_cmd(&state, chat_id).await,
+        Command::Tools => handle_tools_cmd(&state).await,
+        Command::Usage => handle_usage_cmd(&state, chat_id).await,
+        Command::Recover => handle_recover_cmd(&state, chat_id).await,
+        Command::Help => handle_help_cmd(),
+        Command::Status => handle_status_cmd(&state, chat_id).await,
+        Command::Voice => handle_voice_cmd(&state, chat_id).await,
         Command::Persona => handle_persona_command_text(msg.text().unwrap_or("/persona")),
         Command::Update => crate::commands::update::handle_update().await,
-        Command::Code => {
-            // Enter code mode: set override on shared agent and track this chat
-            let user_id = format!("{}", chat_id);
-            let session_id = state.agent.get_or_create_session_id("telegram-code", &user_id);
-            let workspace = crate::commands::code::ensure_workspace(&session_id)
-                .unwrap_or_else(|e| {
-                    tracing::warn!("Failed to create workspace: {}", e);
-                    std::path::PathBuf::from("/tmp/ahnara-code")
-                });
-            let _ = crate::commands::code::init_workspace(&workspace);
-            let code_prompt = crate::commands::code::build_code_system_prompt(&workspace);
-            state.agent.set_session_context("telegram", &user_id).await;
-            state.agent.set_system_prompt_override(&session_id, code_prompt).await;
-            state.enter_code_mode(chat_id, workspace.display().to_string()).await;
-            format!(
-                "Coding mode activated.\nWorkspace: {}\n\nSend your coding task as the next message. Use /normal to exit coding mode.",
-                workspace.display()
-            )
-        }
+        Command::Code => handle_code_cmd(&state, chat_id).await,
         Command::Model(args) => {
-            let user_id = msg.from().map(|u| u.id.0).unwrap_or(0);
-            let user_id_str = user_id.to_string();
-
-            // When /model is called with no args, show the inline keyboard
-            if args.trim().is_empty() {
-                let response = match crate::commands::model::handle_model(
-                    &state.model_store,
-                    "telegram",
-                    &user_id_str,
-                    &args,
-                ) {
-                    Ok(resp) => resp,
-                    Err(e) => format!("Error: {}", e),
-                };
-
-                let keyboard = crate::commands::model::provider_keyboard_json();
-                let formatted = crate::channels::markdown::markdown_to_telegram(&response);
-                let markup: teloxide::types::InlineKeyboardMarkup = serde_json::from_str(&keyboard).unwrap_or_default();
-                let _ = bot
-                    .send_message(teloxide::types::ChatId(chat_id), &formatted)
-                    .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                    .reply_markup(markup)
-                    .await;
-                return Ok(());
-            }
-
-            // Text-based /model commands
-            let response = match crate::commands::model::handle_model(
-                &state.model_store,
-                "telegram",
-                &user_id_str,
-                &args,
-            ) {
-                Ok(resp) => resp,
-                Err(e) => format!("Error: {}", e),
-            };
-            send_markdown_message(&bot, chat_id, &response).await?;
-            return Ok(());
+            return handle_model_cmd(&bot, &state, chat_id, &msg, &args).await;
         }
         Command::Mcp(args) => {
-            let response = crate::commands::mcp::handle_mcp(&args, Some(&state.agent))
-                .await
-                .unwrap_or_else(|e| format!("Error: {}", e));
-            send_markdown_message(&bot, chat_id, &response).await?;
-            return Ok(());
+            return handle_mcp_cmd(&bot, chat_id, &args, &state).await;
         }
         Command::Token(args) => {
-            // Check if the original message contains a secret - delete it
-            if let Some(text) = msg.text() {
-                if crate::commands::token::contains_secret(text) {
-                    // Best-effort delete - don't fail the command if delete fails
-                    let _ = bot.delete_message(teloxide::types::ChatId(chat_id), msg.id).await;
-                }
-            }
-            let response = crate::commands::token::handle_token(&args)
-                .unwrap_or_else(|e| format!("Error: {}", e));
-            send_markdown_message(&bot, chat_id, &response).await?;
-            return Ok(());
+            return handle_token_cmd(&bot, &state, chat_id, &msg, &args).await;
         }
         Command::Logs(args) => {
-            let response = crate::commands::logs::handle_logs(&args).await;
-            send_markdown_message(&bot, chat_id, &response).await?;
-            return Ok(());
+            return handle_logs_cmd(&bot, chat_id, &args).await;
         }
         Command::Schedule(args) => {
-            let config_path = dirs::home_dir()
-                .map(|h| h.join(".ahnara/config.toml"))
-                .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara/config.toml"));
-            let scheduler_manager = crate::tools::scheduler_tools::SchedulerManager::new(
-                state.schedule_log.clone(),
-                config_path.to_string_lossy().to_string(),
-            );
-            let response = crate::commands::schedule::handle_schedule(&args, &scheduler_manager).await;
-            send_markdown_message(&bot, chat_id, &response).await?;
-            return Ok(());
+            return handle_schedule_cmd(&state, chat_id, &args).await;
         }
-        Command::Normal => {
-            let user_id = format!("{}", chat_id);
-            let code_session = state.agent.get_or_create_session_id("telegram-code", &user_id);
-            state.agent.clear_system_prompt_override(&code_session).await;
-            state.agent.reset_session_routing("telegram-code", &user_id);
-            "Exited coding mode. Back to normal.".to_string()
-        }
-        Command::New => {
-            let user_id = format!("{}", chat_id);
-            state.agent.reset_session_routing("telegram", &user_id);
-            state.clear_session(chat_id).await;
-            "New session started".to_string()
-        }
+        Command::Normal => handle_normal_cmd(&state, chat_id).await,
+        Command::New => handle_new_cmd(&state, chat_id).await,
     };
 
     send_markdown_message(&bot, chat_id, &response).await?;
+    Ok(())
+}
+
+async fn handle_memory_cmd(state: &TelegramState, text: &str) -> String {
+    state.agent.handle_memory_text(text).await
+}
+
+async fn handle_clear_cmd(state: &TelegramState, chat_id: i64) -> String {
+    let user_id = format!("{}", chat_id);
+    let session_id = state.agent.get_or_create_session_id("telegram", &user_id);
+    state.agent.clear_session(&session_id).await;
+    state.agent.reset_session_routing("telegram", &user_id);
+    state.clear_session(chat_id).await;
+    "Session cleared".to_string()
+}
+
+async fn handle_tools_cmd(state: &TelegramState) -> String {
+    let tools = state.agent.list_tools();
+    let mut list = String::from("Available tools\n\n");
+    for tool in tools {
+        list.push_str(&format!("- {}: {}\n", tool.name, tool.description));
+    }
+    list
+}
+
+async fn handle_usage_cmd(state: &TelegramState, chat_id: i64) -> String {
+    let session = state.get_or_create_session(chat_id).await;
+    let usage = state.agent.get_usage_stats().await;
+    format!(
+        "Current session\nMessages: {}\nTotal tokens: {}\nPrompt tokens: {}\nCompletion tokens: {}\n\nAll-time\nMessages: {}\nTokens: {}",
+        session.message_count,
+        session.total_tokens,
+        session.prompt_tokens,
+        session.completion_tokens,
+        usage.total_messages,
+        usage.total_tokens,
+    )
+}
+
+async fn handle_recover_cmd(state: &TelegramState, chat_id: i64) -> String {
+    let user_id = format!("{}", chat_id);
+    let session_id = state.agent.get_or_create_session_id("telegram", &user_id);
+    let _ = state.agent.recover_session(&session_id).await;
+    "Session recovered".to_string()
+}
+
+fn handle_help_cmd() -> String {
+    "Commands: /memory /clear /tools /usage /recover /status /voice /persona /new /update /code /normal"
+        .to_string()
+}
+
+async fn handle_status_cmd(state: &TelegramState, chat_id: i64) -> String {
+    let session = state.get_or_create_session(chat_id).await;
+    let uptime = chrono::Utc::now() - session.created_at;
+    format!(
+        "Status: Online\nUptime: {}h {}m\nActive chats: {}\nModel: {}\nVoice mode: {}",
+        uptime.num_hours(),
+        uptime.num_minutes() % 60,
+        state.sessions.read().await.len(),
+        state.agent.model_name(),
+        if session.voice_mode { "ON" } else { "OFF" },
+    )
+}
+
+async fn handle_voice_cmd(state: &TelegramState, chat_id: i64) -> String {
+    let mut sessions = state.sessions.write().await;
+    let session = sessions.entry(chat_id).or_default();
+    session.voice_mode = !session.voice_mode;
+    format!(
+        "Voice mode {}",
+        if session.voice_mode { "ON" } else { "OFF" }
+    )
+}
+
+async fn handle_code_cmd(state: &TelegramState, chat_id: i64) -> String {
+    let user_id = format!("{}", chat_id);
+    let session_id = state.agent.get_or_create_session_id("telegram-code", &user_id);
+    let workspace = crate::commands::code::ensure_workspace(&session_id)
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to create workspace: {}", e);
+            std::path::PathBuf::from("/tmp/ahnara-code")
+        });
+    let _ = crate::commands::code::init_workspace(&workspace);
+    let code_prompt = crate::commands::code::build_code_system_prompt(&workspace);
+    state.agent.set_session_context("telegram", &user_id).await;
+    state.agent.set_system_prompt_override(&session_id, code_prompt).await;
+    state.enter_code_mode(chat_id, workspace.display().to_string()).await;
+    format!(
+        "Coding mode activated.\nWorkspace: {}\n\nSend your coding task as the next message. Use /normal to exit coding mode.",
+        workspace.display()
+    )
+}
+
+async fn handle_model_cmd(
+    bot: &Bot,
+    state: &TelegramState,
+    chat_id: i64,
+    msg: &Message,
+    args: &str,
+) -> ResponseResult<()> {
+    let user_id = msg.from().map(|u| u.id.0).unwrap_or(0);
+    let user_id_str = user_id.to_string();
+
+    if args.trim().is_empty() {
+        let response = match crate::commands::model::handle_model(
+            &state.model_store,
+            "telegram",
+            &user_id_str,
+            args,
+        ) {
+            Ok(resp) => resp,
+            Err(e) => format!("Error: {}", e),
+        };
+
+        let keyboard = crate::commands::model::provider_keyboard_json();
+        let formatted = crate::channels::markdown::markdown_to_telegram(&response);
+        let markup: teloxide::types::InlineKeyboardMarkup = serde_json::from_str(&keyboard).unwrap_or_default();
+        let _ = bot
+            .send_message(teloxide::types::ChatId(chat_id), &formatted)
+            .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+            .reply_markup(markup)
+            .await;
+        return Ok(());
+    }
+
+    let response = match crate::commands::model::handle_model(
+        &state.model_store,
+        "telegram",
+        &user_id_str,
+        args,
+    ) {
+        Ok(resp) => resp,
+        Err(e) => format!("Error: {}", e),
+    };
+    send_markdown_message(bot, chat_id, &response).await?;
+    Ok(())
+}
+
+async fn handle_mcp_cmd(
+    bot: &Bot,
+    chat_id: i64,
+    args: &str,
+    state: &TelegramState,
+) -> ResponseResult<()> {
+    let response = crate::commands::mcp::handle_mcp(args, Some(&state.agent))
+        .await
+        .unwrap_or_else(|e| format!("Error: {}", e));
+    send_markdown_message(bot, chat_id, &response).await?;
+    Ok(())
+}
+
+async fn handle_token_cmd(
+    bot: &Bot,
+    state: &TelegramState,
+    chat_id: i64,
+    msg: &Message,
+    args: &str,
+) -> ResponseResult<()> {
+    if let Some(text) = msg.text() {
+        if crate::commands::token::contains_secret(text) {
+            let _ = bot.delete_message(teloxide::types::ChatId(chat_id), msg.id).await;
+        }
+    }
+    let response = crate::commands::token::handle_token(args)
+        .unwrap_or_else(|e| format!("Error: {}", e));
+    send_markdown_message(bot, chat_id, &response).await?;
+    Ok(())
+}
+
+async fn handle_logs_cmd(bot: &Bot, chat_id: i64, args: &str) -> ResponseResult<()> {
+    let response = crate::commands::logs::handle_logs(args).await;
+    send_markdown_message(bot, chat_id, &response).await?;
+    Ok(())
+}
+
+async fn handle_schedule_cmd(state: &TelegramState, chat_id: i64, args: &str) -> ResponseResult<()> {
+    let config_path = dirs::home_dir()
+        .map(|h| h.join(".ahnara/config.toml"))
+        .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara/config.toml"));
+    let scheduler_manager = crate::tools::scheduler_tools::SchedulerManager::new(
+        state.schedule_log.clone(),
+        config_path.to_string_lossy().to_string(),
+    );
+    let response = crate::commands::schedule::handle_schedule(args, &scheduler_manager).await;
+    send_markdown_message(&TelegramState::get_bot(), chat_id, &response).await?;
+    Ok(())
+}
+
+fn handle_normal_cmd(state: &TelegramState, chat_id: i64) -> String {
+    let user_id = format!("{}", chat_id);
+    let code_session = state.agent.get_or_create_session_id("telegram-code", &user_id);
+    state.agent.clear_system_prompt_override(&code_session);
+    state.agent.reset_session_routing("telegram-code", &user_id);
+    "Exited coding mode. Back to normal.".to_string()
+}
+
+async fn handle_new_cmd(state: &TelegramState, chat_id: i64) -> String {
+    let user_id = format!("{}", chat_id);
+    state.agent.reset_session_routing("telegram", &user_id);
+    state.clear_session(chat_id).await;
+    "New session started".to_string()
+}
+
+async fn handle_custom_subtype(
+    bot: &Bot,
+    state: &TelegramState,
+    chat_id: i64,
+    q: &teloxide::types::CallbackQuery,
+    data: &str,
+) -> ResponseResult<()> {
+    let subtype = data.strip_prefix("model:custom_subtype:").unwrap_or("openai-compatible");
+    let label = if subtype == "anthropic" { "Anthropic-style" } else { "OpenAI-compatible" };
+
+    let user_id_str = q.from.id.0.to_string();
+    let mut ov = match state.model_store.get("telegram", &user_id_str) {
+        Ok(Some(ov)) => ov,
+        Ok(None) => crate::memory::model_store::UserModelOverride::default(),
+        Err(e) => {
+            tracing::error!("Model store get error: {e:?}");
+            let _ = bot.answer_callback_query(q.id.clone()).text("Storage error").await;
+            return Ok(());
+        }
+    };
+    ov.provider_type = Some(format!("custom/{}", subtype));
+    ov.base_url = None;
+    ov.updated_at = crate::commands::model::now_secs();
+    if let Err(e) = state.model_store.set("telegram", &user_id_str, &ov) {
+        tracing::error!("Model store set error: {e:?}");
+        let _ = bot.answer_callback_query(q.id.clone()).text("Storage error").await;
+        return Ok(());
+    }
+
+    state.pending_model_flows.write().await.insert(chat_id, ModelFlowState::WaitingForEndpoint {
+        subtype: subtype.to_string(),
+    });
+
+    let _ = bot.answer_callback_query(q.id.clone()).await;
+    let _ = bot.send_message(
+        teloxide::types::ChatId(chat_id),
+        format!(
+            "{} API format selected.\n\nSend your endpoint URL and model ID together, like:\nhttps://your-api.example.com/v1 model-name\n\nI'll auto-detect which is which.",
+            label
+        ),
+    ).await;
+
     Ok(())
 }
 
@@ -547,62 +642,21 @@ async fn handle_callback_query(
     q: teloxide::types::CallbackQuery,
     state: Arc<TelegramState>,
 ) -> ResponseResult<()> {
-    let chat_id = if let Some(msg) = &q.message {
-        msg.chat.id.0
-    } else {
-        return Ok(());
+    let chat_id = match &q.message {
+        Some(msg) => msg.chat.id.0,
+        None => return Ok(()),
     };
 
     let data = q.data.as_deref().unwrap_or("");
 
-    // Only handle model:... callbacks
     if !data.starts_with("model:") {
         return Ok(());
     }
 
     let user_id = q.from.id.0;
 
-    // Special handling for custom_subtype: set flow state instead of returning text instructions
     if data.starts_with("model:custom_subtype:") {
-        let subtype = data.strip_prefix("model:custom_subtype:").unwrap_or("openai-compatible");
-        let label = if subtype == "anthropic" { "Anthropic-style" } else { "OpenAI-compatible" };
-
-        // Save the provider type
-        let user_id_str = user_id.to_string();
-        let get_result = state.model_store.get("telegram", &user_id_str);
-        let mut ov = match get_result {
-            Ok(Some(ov)) => ov,
-            Ok(None) => crate::memory::model_store::UserModelOverride::default(),
-            Err(e) => {
-                tracing::error!("Model store get error: {e:?}");
-                let _ = bot.answer_callback_query(q.id).text("Storage error").await;
-                return Ok(());
-            }
-        };
-        ov.provider_type = Some(format!("custom/{}", subtype));
-        ov.base_url = None;
-        ov.updated_at = crate::commands::model::now_secs();
-        if let Err(e) = state.model_store.set("telegram", &user_id_str, &ov) {
-            tracing::error!("Model store set error: {e:?}");
-            let _ = bot.answer_callback_query(q.id).text("Storage error").await;
-            return Ok(());
-        }
-
-        // Set flow state: waiting for endpoint URL + model ID
-        state.pending_model_flows.write().await.insert(chat_id, ModelFlowState::WaitingForEndpoint {
-            subtype: subtype.to_string(),
-        });
-
-        let _ = bot.answer_callback_query(q.id).await;
-        let _ = bot.send_message(
-            teloxide::types::ChatId(chat_id),
-            format!(
-                "{} API format selected.\n\nSend your endpoint URL and model ID together, like:\nhttps://your-api.example.com/v1 model-name\n\nI'll auto-detect which is which.",
-                label
-            ),
-        ).await;
-
-        return Ok(());
+        return handle_custom_subtype(&bot, &state, chat_id, &q, data).await;
     }
 
     match crate::commands::model::handle_callback(
@@ -649,87 +703,105 @@ async fn handle_model_flow(
     text: &str,
     flow: ModelFlowState,
 ) -> anyhow::Result<()> {
+    match flow {
+        ModelFlowState::WaitingForEndpoint { subtype } => {
+            handle_waiting_for_endpoint(bot, state, chat_id, text, &subtype).await
+        }
+        ModelFlowState::WaitingForKey => {
+            handle_waiting_for_key(bot, state, chat_id, msg_id, text).await
+        }
+    }
+}
+
+async fn handle_waiting_for_endpoint(
+    bot: &Bot,
+    state: &TelegramState,
+    chat_id: i64,
+    text: &str,
+    subtype: &str,
+) -> anyhow::Result<()> {
     use crate::commands::model;
     let user_id = format!("{}", chat_id);
     let store = &*state.model_store;
 
-    match flow {
-        ModelFlowState::WaitingForEndpoint { subtype } => {
-            // Parse URL + model ID from freeform text
-            // Auto-detect: anything with /v1 (or http(s)://) is the URL, rest is model ID
-            let tokens: Vec<&str> = text.split_whitespace().collect();
-            let mut url: Option<&str> = None;
-            let mut model_id: Option<&str> = None;
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let mut url: Option<&str> = None;
+    let mut model_id: Option<&str> = None;
 
-            for token in &tokens {
-                if token.contains("/v1") || token.starts_with("http://") || token.starts_with("https://") {
-                    url = Some(token);
-                } else {
-                    model_id = Some(token);
-                }
-            }
-
-            let url = url.ok_or_else(|| anyhow::anyhow!(
-                "Could not detect a URL. Send both like:\n`https://your-api.example.com/v1 model-name`"
-            ))?;
-            let model_id = model_id.ok_or_else(|| anyhow::anyhow!(
-                "Could not detect a model ID. Send both like:\n`https://your-api.example.com/v1 model-name`"
-            ))?;
-
-            // Save endpoint + model
-            let mut ov = store.get("telegram", &user_id)?.unwrap_or_default();
-            ov.provider_type = Some(format!("custom/{}", subtype));
-            ov.base_url = Some(url.to_string());
-            ov.model_id = Some(model_id.to_string());
-            ov.updated_at = model::now_secs();
-            store.set("telegram", &user_id, &ov)?;
-
-            // Move to next step: ask for key
-            state.pending_model_flows.write().await.insert(chat_id, ModelFlowState::WaitingForKey);
-
-            let _ = send_markdown_message(
-                bot,
-                chat_id,
-                &format!(
-                    "Endpoint saved: {}\nModel: {}\n\nNow send your API key (just the key, nothing else).\nI will delete your message after saving it.",
-                    url, model_id
-                ),
-            ).await?;
-        }
-        ModelFlowState::WaitingForKey => {
-            let key = text.trim();
-            if key.is_empty() || key.len() < 4 {
-                // Put the flow state back so they can retry
-                state.pending_model_flows.write().await.insert(chat_id, ModelFlowState::WaitingForKey);
-                let _ = send_markdown_message(bot, chat_id, "Key too short. Send your API key again.").await?;
-                return Ok(());
-            }
-
-            // Delete the message containing the key immediately
-            let _ = bot.delete_message(teloxide::types::ChatId(chat_id), msg_id).await;
-
-            // Save encrypted key
-            let mut ov = store.get("telegram", &user_id)?.unwrap_or_default();
-            let encrypted = store.encrypt_key(key)?;
-            ov.encrypted_api_key = Some(encrypted);
-            ov.updated_at = model::now_secs();
-            store.set("telegram", &user_id, &ov)?;
-
-            // Clear flow state -- done
-            state.pending_model_flows.write().await.remove(&chat_id);
-
-            let masked = model::mask_key(key);
-            let summary = model::build_summary_for_user("telegram", &user_id, store)?;
-            let _ = send_markdown_message(
-                bot,
-                chat_id,
-                &format!(
-                    "API key saved: `{}`\n\n{}",
-                    masked, summary
-                ),
-            ).await?;
+    for token in &tokens {
+        if token.contains("/v1") || token.starts_with("http://") || token.starts_with("https://") {
+            url = Some(token);
+        } else {
+            model_id = Some(token);
         }
     }
+
+    let url = url.ok_or_else(|| anyhow::anyhow!(
+        "Could not detect a URL. Send both like:\n`https://your-api.example.com/v1 model-name`"
+    ))?;
+    let model_id = model_id.ok_or_else(|| anyhow::anyhow!(
+        "Could not detect a model ID. Send both like:\n`https://your-api.example.com/v1 model-name`"
+    ))?;
+
+    let mut ov = store.get("telegram", &user_id)?.unwrap_or_default();
+    ov.provider_type = Some(format!("custom/{}", subtype));
+    ov.base_url = Some(url.to_string());
+    ov.model_id = Some(model_id.to_string());
+    ov.updated_at = model::now_secs();
+    store.set("telegram", &user_id, &ov)?;
+
+    state.pending_model_flows.write().await.insert(chat_id, ModelFlowState::WaitingForKey);
+
+    let _ = send_markdown_message(
+        bot,
+        chat_id,
+        &format!(
+            "Endpoint saved: {}\nModel: {}\n\nNow send your API key (just the key, nothing else).\nI will delete your message after saving it.",
+            url, model_id
+        ),
+    ).await?;
+
+    Ok(())
+}
+
+async fn handle_waiting_for_key(
+    bot: &Bot,
+    state: &TelegramState,
+    chat_id: i64,
+    msg_id: teloxide::types::MessageId,
+    text: &str,
+) -> anyhow::Result<()> {
+    use crate::commands::model;
+    let user_id = format!("{}", chat_id);
+    let store = &*state.model_store;
+
+    let key = text.trim();
+    if key.is_empty() || key.len() < 4 {
+        state.pending_model_flows.write().await.insert(chat_id, ModelFlowState::WaitingForKey);
+        let _ = send_markdown_message(bot, chat_id, "Key too short. Send your API key again.").await?;
+        return Ok(());
+    }
+
+    let _ = bot.delete_message(teloxide::types::ChatId(chat_id), msg_id).await;
+
+    let mut ov = store.get("telegram", &user_id)?.unwrap_or_default();
+    let encrypted = store.encrypt_key(key)?;
+    ov.encrypted_api_key = Some(encrypted);
+    ov.updated_at = model::now_secs();
+    store.set("telegram", &user_id, &ov)?;
+
+    state.pending_model_flows.write().await.remove(&chat_id);
+
+    let masked = model::mask_key(key);
+    let summary = model::build_summary_for_user("telegram", &user_id, store)?;
+    let _ = send_markdown_message(
+        bot,
+        chat_id,
+        &format!(
+            "API key saved: `{}`\n\n{}",
+            masked, summary
+        ),
+    ).await?;
 
     Ok(())
 }
@@ -1085,49 +1157,65 @@ async fn send_structured_output(
     use teloxide::types::InputFile;
 
     match output.format.as_str() {
-        "image" => {
-            let path = output.content.as_str().unwrap_or_default();
-            let photo = InputFile::file(path);
-            bot.send_photo(teloxide::types::ChatId(chat_id), photo)
-                .await?;
-        }
-        "video" => {
-            let path = output.content.as_str().unwrap_or_default();
-            let video = InputFile::file(path);
-            bot.send_video(teloxide::types::ChatId(chat_id), video)
-                .await?;
-        }
-        "file" => {
-            let path = output.content.as_str().unwrap_or_default();
-            let mut doc = InputFile::file(path);
-            if let Some(ref name) = output.filename {
-                doc = doc.file_name(name.clone());
-            }
-            bot.send_document(teloxide::types::ChatId(chat_id), doc)
-                .await?;
-        }
-        "json" | "csv" | "markdown" => {
-            let content = match output.format.as_str() {
-                "json" => serde_json::to_string_pretty(&output.content).unwrap_or_else(|_| output.content.to_string()),
-                _ => output.content.as_str().unwrap_or(&output.content.to_string()).to_string(),
-            };
-            let filename = output.filename.clone().unwrap_or_else(|| match output.format.as_str() {
-                "json" => "output.json".into(),
-                "csv" => "output.csv".into(),
-                "markdown" => "output.md".into(),
-                _ => "output.txt".into(),
-            });
-            let ext = filename.rsplit('.').next().unwrap_or("txt");
-            let tmp = std::env::temp_dir().join(format!("auxlo_structured_{}.{}", uuid::Uuid::new_v4(), ext));
-            std::fs::write(&tmp, &content)?;
-            let doc = InputFile::file(&tmp).file_name(filename);
-            let _ = bot.send_document(teloxide::types::ChatId(chat_id), doc)
-                .await;
-            let _ = std::fs::remove_file(&tmp);
-        }
+        "image" => send_image(bot, chat_id, output).await,
+        "video" => send_video(bot, chat_id, output).await,
+        "file" => send_file_attachment(bot, chat_id, output).await,
+        "json" | "csv" | "markdown" => send_text_file(bot, chat_id, output).await,
         _ => {
             tracing::warn!("Unknown structured output format: {}", output.format);
+            Ok(())
         }
     }
+}
+
+async fn send_image(bot: &Bot, chat_id: i64, output: &crate::agent::StructuredOutput) -> anyhow::Result<()> {
+    use teloxide::types::InputFile;
+    let path = output.content.as_str().unwrap_or_default();
+    let photo = InputFile::file(path);
+    bot.send_photo(teloxide::types::ChatId(chat_id), photo).await?;
+    Ok(())
+}
+
+async fn send_video(bot: &Bot, chat_id: i64, output: &crate::agent::StructuredOutput) -> anyhow::Result<()> {
+    use teloxide::types::InputFile;
+    let path = output.content.as_str().unwrap_or_default();
+    let video = InputFile::file(path);
+    bot.send_video(teloxide::types::ChatId(chat_id), video).await?;
+    Ok(())
+}
+
+async fn send_file_attachment(bot: &Bot, chat_id: i64, output: &crate::agent::StructuredOutput) -> anyhow::Result<()> {
+    use teloxide::types::InputFile;
+    let path = output.content.as_str().unwrap_or_default();
+    let mut doc = InputFile::file(path);
+    if let Some(ref name) = output.filename {
+        doc = doc.file_name(name.clone());
+    }
+    bot.send_document(teloxide::types::ChatId(chat_id), doc).await?;
+    Ok(())
+}
+
+async fn send_text_file(bot: &Bot, chat_id: i64, output: &crate::agent::StructuredOutput) -> anyhow::Result<()> {
+    use teloxide::types::InputFile;
+    
+    let content = match output.format.as_str() {
+        "json" => serde_json::to_string_pretty(&output.content).unwrap_or_else(|_| output.content.to_string()),
+        _ => output.content.as_str().unwrap_or(&output.content.to_string()).to_string(),
+    };
+    
+    let filename = output.filename.clone().unwrap_or_else(|| match output.format.as_str() {
+        "json" => "output.json".into(),
+        "csv" => "output.csv".into(),
+        "markdown" => "output.md".into(),
+        _ => "output.txt".into(),
+    });
+    
+    let ext = filename.rsplit('.').next().unwrap_or("txt");
+    let tmp = std::env::temp_dir().join(format!("ahnara_structured_{}.{}", uuid::Uuid::new_v4(), ext));
+    std::fs::write(&tmp, &content)?;
+    let doc = InputFile::file(&tmp).file_name(filename);
+    let _ = bot.send_document(teloxide::types::ChatId(chat_id), doc).await;
+    let _ = std::fs::remove_file(&tmp);
+    
     Ok(())
 }

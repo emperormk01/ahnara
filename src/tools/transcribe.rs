@@ -113,7 +113,13 @@ pub fn transcribe_audio_sync(
         ));
     }
 
-    // Ensure faster-whisper is installed
+    ensure_faster_whisper_installed();
+
+    let output = run_transcription_script(&script, audio_path, model_size, language)?;
+    parse_transcription_output(output)
+}
+
+fn ensure_faster_whisper_installed() {
     let check = std::process::Command::new("python3")
         .args(["-c", "import faster_whisper"])
         .output();
@@ -134,21 +140,26 @@ pub fn transcribe_audio_sync(
                 .output();
         }
     }
+}
 
+fn run_transcription_script(
+    script: &std::path::Path,
+    audio_path: &str,
+    model_size: &str,
+    language: Option<&str>,
+) -> Result<std::process::Output, String> {
     let mut cmd = std::process::Command::new("python3");
     cmd.arg(&script).arg(audio_path).arg(model_size);
     if let Some(lang) = language {
         cmd.arg(lang);
     }
+    cmd.output().map_err(|e| format!("Failed to run transcription: {e}"))
+}
 
-    let output = cmd
-        .output()
-        .map_err(|e| format!("Failed to run transcription: {e}"))?;
-
+fn parse_transcription_output(output: std::process::Output) -> Result<TranscriptionResult, String> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        // The script may print error JSON to stdout
         if let Ok(err_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
             if let Some(err) = err_json.get("error").and_then(|e| e.as_str()) {
                 return Err(err.to_string());
@@ -162,7 +173,7 @@ pub fn transcribe_audio_sync(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_transcription_output(&stdout)
+    parse_transcription_json(&stdout)
 }
 
 /// Parsed transcription result.
@@ -181,7 +192,7 @@ pub struct TranscriptionSegment {
     pub text: String,
 }
 
-fn parse_transcription_output(stdout: &str) -> Result<TranscriptionResult, String> {
+fn parse_transcription_json(stdout: &str) -> Result<TranscriptionResult, String> {
     let v: serde_json::Value = serde_json::from_str(stdout.trim())
         .map_err(|e| format!("Failed to parse transcription JSON: {e}"))?;
 

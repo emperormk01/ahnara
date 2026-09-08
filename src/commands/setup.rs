@@ -61,231 +61,295 @@ pub fn handle_setup_with(
 
     let config_path = config_dir.join("config.toml");
 
-    // Route 1: explicit quick flag → existing quick_setup
     if quick {
         return quick_setup(&config_dir, telegram, discord);
     }
 
-    // Route 2: any non-interactive option provided → build config without prompts
-    let has_non_interactive = non_interactive.provider.is_some()
+    if has_non_interactive_options(&non_interactive) {
+        return non_interactive_setup(&config_dir, &config_path, &non_interactive);
+    }
+
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return Err(bail_non_tty());
+    }
+
+    interactive_setup(&config_dir, &config_path, telegram, discord)
+}
+
+fn has_non_interactive_options(non_interactive: &NonInteractiveOptions) -> bool {
+    non_interactive.provider.is_some()
         || non_interactive.model.is_some()
         || non_interactive.api_key.is_some()
         || non_interactive.telegram_token.is_some()
         || non_interactive.discord_token.is_some()
-        || non_interactive.github_token.is_some();
-    if has_non_interactive {
-        return non_interactive_setup(&config_dir, &config_path, &non_interactive);
-    }
+        || non_interactive.github_token.is_some()
+}
 
-    // Route 3: TTY check. Refuse to run the interactive wizard without a
-    // terminal -- dialoguer will block forever or read EOF on EOF-only stdin.
-    if !std::io::stdin().is_terminal() {
-        return Err(bail_non_tty());
-    }
-    if !std::io::stdout().is_terminal() {
-        return Err(bail_non_tty());
-    }
-
-    // Interactive setup
+fn interactive_setup(
+    config_dir: &std::path::Path,
+    config_path: &std::path::Path,
+    telegram: bool,
+    discord: bool,
+) -> Result<()> {
     println!("This wizard will help you configure AHNARA.\n");
 
-    // Create config directory
     if !config_dir.exists() {
-        fs::create_dir_all(&config_dir)?;
+        fs::create_dir_all(config_dir)?;
         fs::create_dir_all(config_dir.join("skills"))?;
         fs::create_dir_all(config_dir.join("memory"))?;
         println!("Created config directory: {:?}", config_dir);
     }
-    
-    // Agent name
-    let agent_name: String = Input::with_theme(&ColorfulTheme::default())
+
+    let agent_name = prompt_agent_name()?;
+    let (provider_name, api_base) = prompt_provider()?;
+    let model = prompt_model()?;
+    let api_key = prompt_api_key()?;
+    let temperature = prompt_temperature()?;
+    let (enable_telegram, telegram_token) = prompt_telegram(telegram)?;
+    let (enable_discord, discord_token) = prompt_discord(discord)?;
+    let (enable_github_mcp, github_token) = prompt_github_mcp()?;
+    let extra_mcp_servers = prompt_extra_mcp_servers(enable_github_mcp)?;
+
+    save_config(
+        config_dir,
+        config_path,
+        &agent_name,
+        &provider_name,
+        &api_base,
+        &model,
+        &api_key,
+        temperature,
+        enable_telegram,
+        telegram_token.as_deref(),
+        enable_discord,
+        discord_token.as_deref(),
+        enable_github_mcp,
+        github_token.as_deref(),
+        &extra_mcp_servers,
+    )?;
+
+    println!("\nSetup complete! Config saved to: {:?}", config_path);
+    println!("Run `ahnara` to start your agent.");
+
+    Ok(())
+}
+
+fn prompt_agent_name() -> Result<String> {
+    Ok(Input::with_theme(&ColorfulTheme::default())
         .with_prompt("Agent name")
         .default("AHNARA".into())
-        .interact_text()?;
-    
-    // Provider selection
+        .interact_text()?)
+}
+
+fn prompt_provider() -> Result<(String, String)> {
     let providers = vec![
-        "OpenAI",
-        "Anthropic",
-        "Google Gemini",
-        "OpenRouter (multi-model)",
-        "Groq",
-        "NVIDIA",
-        "Custom endpoint",
+        "OpenAI", "Anthropic", "Google Gemini", "OpenRouter (multi-model)",
+        "Groq", "NVIDIA", "Custom endpoint",
     ];
-    
+
     let provider_idx = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("Select your LLM provider")
         .items(&providers)
         .interact()?;
-    
-    let (provider_name, api_base) = match provider_idx {
-        0 => ("openai", "https://api.openai.com/v1".to_string()),
-        1 => ("anthropic", "https://api.anthropic.com/v1".to_string()),
-        2 => ("google", "https://generativelanguage.googleapis.com/v1beta/openai".to_string()),
-        3 => ("openrouter", "https://openrouter.ai/api/v1".to_string()),
-        4 => ("groq", "https://api.groq.com/openai/v1".to_string()),
-        5 => ("nvidia", "https://integrate.api.nvidia.com/v1".to_string()),
+
+    match provider_idx {
+        0 => Ok(("openai".into(), "https://api.openai.com/v1".into())),
+        1 => Ok(("anthropic".into(), "https://api.anthropic.com/v1".into())),
+        2 => Ok(("google".into(), "https://generativelanguage.googleapis.com/v1beta/openai".into())),
+        3 => Ok(("openrouter".into(), "https://openrouter.ai/api/v1".into())),
+        4 => Ok(("groq".into(), "https://api.groq.com/openai/v1".into())),
+        5 => Ok(("nvidia".into(), "https://integrate.api.nvidia.com/v1".into())),
         6 => {
             let base: String = Input::with_theme(&ColorfulTheme::default())
                 .with_prompt("API base URL")
                 .interact_text()?;
-            ("custom", base)
-        },
+            Ok(("custom".into(), base))
+        }
         _ => bail!("Invalid selection"),
-    };
+    }
+}
 
-    // Model ID
-    let model: String = Input::with_theme(&ColorfulTheme::default())
+fn prompt_model() -> Result<String> {
+    Ok(Input::with_theme(&ColorfulTheme::default())
         .with_prompt("Model ID (e.g. gpt-4o, claude-3-5-sonnet-20241022, gemini-1.5-flash)")
-        .interact_text()?;
-    
-    // API Key
-    let api_key: String = Input::with_theme(&ColorfulTheme::default())
+        .interact_text()?)
+}
+
+fn prompt_api_key() -> Result<String> {
+    Ok(Input::with_theme(&ColorfulTheme::default())
         .with_prompt("API Key")
-        .interact_text()?;
-    
-    // Temperature
+        .interact_text()?)
+}
+
+fn prompt_temperature() -> Result<f32> {
     let temp_str: String = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("Temperature (0.0-2.0)")
         .default("1.0".into())
         .interact_text()?;
-    let temperature: f32 = temp_str.parse().unwrap_or(1.0);
-    
-    // Channels
-    let enable_telegram = telegram || Confirm::with_theme(&ColorfulTheme::default())
+    Ok(temp_str.parse().unwrap_or(1.0))
+}
+
+fn prompt_telegram(force_enable: bool) -> Result<(bool, Option<String>)> {
+    let enable = force_enable || Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt("Enable Telegram?")
         .default(false)
         .interact()?;
-    
-    let telegram_token = if enable_telegram {
-        let token: String = Input::with_theme(&ColorfulTheme::default())
+
+    let token = if enable {
+        Some(Input::with_theme(&ColorfulTheme::default())
             .with_prompt("Telegram Bot Token")
             .allow_empty(true)
-            .interact_text()?;
-        Some(token)
+            .interact_text()?)
     } else {
         None
     };
-    
-    let enable_discord = discord || Confirm::with_theme(&ColorfulTheme::default())
+
+    Ok((enable, token))
+}
+
+fn prompt_discord(force_enable: bool) -> Result<(bool, Option<String>)> {
+    let enable = force_enable || Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt("Enable Discord?")
         .default(false)
         .interact()?;
-    
-    let discord_token = if enable_discord {
-        let token: String = Input::with_theme(&ColorfulTheme::default())
+
+    let token = if enable {
+        Some(Input::with_theme(&ColorfulTheme::default())
             .with_prompt("Discord Bot Token")
             .allow_empty(true)
-            .interact_text()?;
-        Some(token)
+            .interact_text()?)
     } else {
         None
     };
-    
-    // MCP Integrations
-    let enable_github_mcp = Confirm::with_theme(&ColorfulTheme::default())
+
+    Ok((enable, token))
+}
+
+fn prompt_github_mcp() -> Result<(bool, Option<String>)> {
+    let enable = Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt("Enable GitHub integration (MCP)?")
         .default(false)
         .interact()?;
-    
-    let github_token = if enable_github_mcp {
+
+    let token = if enable {
         println!("  To create a token: GitHub Settings > Developer settings > Personal access tokens");
         println!("  Required scopes: repo, read:org, read:user\n");
-        let token: String = Input::with_theme(&ColorfulTheme::default())
+        Some(Input::with_theme(&ColorfulTheme::default())
             .with_prompt("GitHub Personal Access Token")
-            .interact_text()?;
-        Some(token)
+            .interact_text()?)
     } else {
         None
     };
-    
-    // Extra MCP servers
-    let mut extra_mcp_servers: Vec<(String, String, Vec<String>)> = Vec::new();
-    if !enable_github_mcp {
-        let add_more_mcp = Confirm::with_theme(&ColorfulTheme::default())
+
+    Ok((enable, token))
+}
+
+fn prompt_extra_mcp_servers(github_enabled: bool) -> Result<Vec<(String, String, Vec<String>)>> {
+    let mut servers = Vec::new();
+    if !github_enabled {
+        let add_more = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Add other MCP servers? (You can also use /mcp add later)")
             .default(false)
             .interact()?;
-        
-        if add_more_mcp {
+
+        if add_more {
             loop {
                 println!("\nAdd MCP server (leave name empty to finish):");
                 let name: String = Input::with_theme(&ColorfulTheme::default())
                     .with_prompt("  Server name (e.g. filesystem, slack)")
                     .allow_empty(true)
                     .interact_text()?;
-                
+
                 if name.is_empty() {
                     break;
                 }
-                
+
                 let command: String = Input::with_theme(&ColorfulTheme::default())
                     .with_prompt("  Command (e.g. npx -y @modelcontextprotocol/server-filesystem)")
                     .interact_text()?;
-                
+
                 let args_str: String = Input::with_theme(&ColorfulTheme::default())
                     .with_prompt("  Arguments (space-separated, e.g. /home/workspace)")
                     .allow_empty(true)
                     .interact_text()?;
-                
-                let args: Vec<String> = if args_str.is_empty() {
+
+                let args = if args_str.is_empty() {
                     Vec::new()
                 } else {
                     args_str.split_whitespace().map(String::from).collect()
                 };
-                
-                extra_mcp_servers.push((name, command, args));
+
+                servers.push((name, command, args));
             }
         }
     }
-    
-    // Token management
+    Ok(servers)
+}
+
+fn save_config(
+    config_dir: &std::path::Path,
+    config_path: &std::path::Path,
+    agent_name: &str,
+    provider_name: &str,
+    api_base: &str,
+    model: &str,
+    api_key: &str,
+    temperature: f32,
+    enable_telegram: bool,
+    telegram_token: Option<&str>,
+    enable_discord: bool,
+    discord_token: Option<&str>,
+    enable_github_mcp: bool,
+    github_token: Option<&str>,
+    extra_mcp_servers: &[(String, String, Vec<String>)],
+) -> Result<()> {
     if github_token.is_none() {
         println!("\nYou can set tokens later with:");
         println!("  ahnara token set GITHUB_TOKEN <your-token>");
         println!("  Or use /token set GITHUB_TOKEN <your-token> in Telegram/Discord\n");
     }
-    
-    // Generate config
+
     let config = generate_config(
-        &agent_name,
-        provider_name,
-        &api_base,
-        &model,
-        &api_key,
-        temperature,
-        telegram_token.as_deref(),
-        discord_token.as_deref(),
-        github_token.as_deref(),
-        &extra_mcp_servers,
+        agent_name, provider_name, api_base, model, api_key, temperature,
+        telegram_token, discord_token, github_token, extra_mcp_servers,
     );
-    
-    fs::write(&config_path, &config)?;
-    if let Err(e) = restrict_permissions(&config_path) {
+
+    fs::write(config_path, &config)?;
+    if let Err(e) = restrict_permissions(config_path) {
         eprintln!("Warning: could not restrict permissions on config: {e}");
     }
     println!("\nConfiguration saved to {:?}", config_path);
-    
-    // Save token store
+
     if github_token.is_some() {
         let token_dir = config_dir.join("tokens.json");
         let mut tokens = serde_json::Map::new();
-        if let Some(ref t) = github_token {
-            tokens.insert("GITHUB_TOKEN".to_string(), serde_json::Value::String(t.clone()));
+        if let Some(t) = github_token {
+            tokens.insert("GITHUB_TOKEN".to_string(), serde_json::Value::String(t.into()));
         }
         let token_json = serde_json::to_string_pretty(&tokens)?;
         fs::write(&token_dir, token_json)?;
         println!("Tokens saved to {:?}", token_dir);
     }
-    
-    // Summary
+
     println!("\nSummary:");
     println!("  Agent: {}", agent_name);
     println!("  Provider: {} ({})", provider_name, model);
     println!("  Temperature: {}", temperature);
     if enable_telegram {
         println!("  Telegram: enabled");
+    }
+    if enable_discord {
+        println!("  Discord: enabled");
+    }
+    if enable_github_mcp {
+        println!("  GitHub MCP: enabled");
+    }
+    if !extra_mcp_servers.is_empty() {
+        println!("  Extra MCP servers: {}", extra_mcp_servers.len());
+    }
+
+    Ok(())
+}
     }
     if enable_discord {
         println!("  Discord: enabled");
@@ -406,20 +470,12 @@ fn generate_config(
         format!("default_model = \"{}\"\n", model)
     };
 
-    let provider_block = if !provider.is_empty() && !api_base.is_empty() {
-        format!(
-            r#"[[providers.providers]]
-name = "{}"
-api_base = "{}"
-api_key = "{}"  # set via ahnara token or env var
-"#,
-            provider, api_base, sanitize_api_key(api_key, "AHNARA_API_KEY")
-        )
-    } else {
-        String::new()
-    };
+    let provider_block = generate_provider_block(provider, api_base, api_key);
+    let telegram_block = generate_telegram_block(telegram_token);
+    let discord_block = generate_discord_block(discord_token);
+    let mcp_block = generate_mcp_block(github_token, extra_mcp);
 
-    let mut config = format!(
+    format!(
         r#"# AHNARA Configuration
 
 [agent]
@@ -440,12 +496,61 @@ hot_cache_size = 1000
 session_max_messages = 100
 consolidation_interval_secs = 300
 
-[channels.telegram]
+{}{}[tools]
+exec_enabled = true
+exec_timeout_secs = 60
+restrict_to_workspace = true
+web_search_enabled = true
+web_search_provider = "brave"
+
+[server]
+host = "0.0.0.0"
+port = 3000
+
+{}"#,
+        agent_name, model_line, temperature, provider_block,
+        telegram_block, discord_block, mcp_block
+    )
+}
+
+fn generate_provider_block(provider: &str, api_base: &str, api_key: &str) -> String {
+    if !provider.is_empty() && !api_base.is_empty() {
+        format!(
+            r#"[[providers.providers]]
+name = "{}"
+api_base = "{}"
+api_key = "{}"  # set via ahnara token or env var
+"#,
+            provider, api_base, sanitize_api_key(api_key, "AHNARA_API_KEY")
+        )
+    } else {
+        String::new()
+    }
+}
+
+fn generate_telegram_block(telegram_token: Option<&str>) -> String {
+    let (enabled, token) = match telegram_token {
+        Some(t) => (true, t),
+        None => (false, ""),
+    };
+    format!(
+        r#"[channels.telegram]
 enabled = {}
 token = "{}"
 group_policy = "mention"
 
-[channels.discord]
+"#,
+        enabled, token
+    )
+}
+
+fn generate_discord_block(discord_token: Option<&str>) -> String {
+    let (enabled, token) = match discord_token {
+        Some(t) => (true, t),
+        None => (false, ""),
+    };
+    format!(
+        r#"[channels.discord]
 enabled = {}
 token = "{}"
 group_policy = "mention"
@@ -456,60 +561,48 @@ enabled = false
 bot_token = ""
 app_token = ""
 
-[tools]
-exec_enabled = true
-exec_timeout_secs = 60
-restrict_to_workspace = true
-web_search_enabled = true
-web_search_provider = "brave"
-
-[server]
-host = "0.0.0.0"
-port = 18789
-cors_enabled = true
-
-[mcp]
-enabled = true
 "#,
-        agent_name,
-        model_line,
-        temperature,
-        provider_block,
-        telegram_token.is_some() && !telegram_token.unwrap_or("").trim().is_empty(),
-        telegram_token.unwrap_or("").trim(),
-        discord_token.is_some() && !discord_token.unwrap_or("").trim().is_empty(),
-        discord_token.unwrap_or("").trim()
-    );
+        enabled, token
+    )
+}
 
-    // Add GitHub MCP server if token provided
-    if github_token.is_some() {
-        config.push_str(&format!(r#"
-[[mcp.servers]]
+fn generate_mcp_block(github_token: Option<&str>, extra_mcp: &[(String, String, Vec<String>)]) -> String {
+    let mut mcp_servers = Vec::new();
+
+    if let Some(token) = github_token {
+        mcp_servers.push(format!(
+            r#"[[mcp.servers]]
 name = "github"
-command = "mcp-server-github"
-args = []
-tool_prefix = "github"
-timeout_secs = 30
-
-[mcp.servers.env]
-GITHUB_PERSONAL_ACCESS_TOKEN = "{}"
-"#, github_token.unwrap()));
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env = {{ GITHUB_TOKEN = "{}" }}"#,
+            token
+        ));
     }
 
-    // Add extra MCP servers
     for (name, command, args) in extra_mcp {
         let args_str: Vec<String> = args.iter().map(|a| format!("\"{}\"", a)).collect();
-        config.push_str(&format!(r#"
-[[mcp.servers]]
+        mcp_servers.push(format!(
+            r#"[[mcp.servers]]
 name = "{}"
 command = "{}"
-args = [{}]
-tool_prefix = "{}"
-timeout_secs = 30
-"#, name, command, args_str.join(", "), name));
+args = [{}]"#,
+            name, command, args_str.join(", ")
+        ));
     }
 
-    config
+    if mcp_servers.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"[mcp]
+enabled = true
+
+{}
+"#,
+            mcp_servers.join("\n\n")
+        )
+    }
 }
 
 fn bail_non_tty() -> anyhow::Error {
@@ -531,33 +624,16 @@ fn non_interactive_setup(
 
     let provider = opts.provider.as_deref().unwrap_or("");
     let model = opts.model.as_deref().unwrap_or("");
-    let api_base = match opts.provider.as_deref() {
-        Some("nvidia") => "https://integrate.api.nvidia.com/v1",
-        Some("openai") => "https://api.openai.com/v1",
-        Some("anthropic") => "https://api.anthropic.com/v1",
-        Some("openrouter") => "https://openrouter.ai/api/v1",
-        Some("groq") => "https://api.groq.com/openai/v1",
-        Some("deepseek") => "https://api.deepseek.com/v1",
-        Some(other) if !other.is_empty() => bail!("Unsupported provider: {}. Use --base to specify a custom API base URL.", other),
-        _ => "",
-    };
+    let api_base = resolve_provider_base(provider)?;
     let api_key = opts.api_key.as_deref().unwrap_or("");
-    let telegram_token = opts.telegram_token.as_deref();
-    let discord_token = opts.discord_token.as_deref();
-    let github_token = opts.github_token.as_deref();
+    let telegram_token = opts.telegram_token.as_deref().filter(|t| !t.trim().is_empty());
+    let discord_token = opts.discord_token.as_deref().filter(|t| !t.trim().is_empty());
+    let github_token = opts.github_token.as_deref().filter(|t| !t.trim().is_empty());
     let extra_mcp = &[];
 
     let config = generate_config(
-        "AHNARA",
-        provider,
-        api_base,
-        model,
-        api_key,
-        1.0,
-        if telegram_token.is_some() && !telegram_token.unwrap_or("").trim().is_empty() { Some(telegram_token.unwrap()) } else { None },
-        if discord_token.is_some() && !discord_token.unwrap_or("").trim().is_empty() { Some(discord_token.unwrap()) } else { None },
-        if github_token.is_some() && !github_token.unwrap_or("").trim().is_empty() { Some(github_token.unwrap()) } else { None },
-        extra_mcp,
+        "AHNARA", provider, api_base, model, api_key, 1.0,
+        telegram_token, discord_token, github_token, extra_mcp,
     );
 
     fs::write(config_path, &config)?;
@@ -565,19 +641,32 @@ fn non_interactive_setup(
         eprintln!("Warning: could not restrict permissions on config: {e}");
     }
 
-    let mut enabled_telegram = false;
-    let mut enabled_discord = false;
-    let mut enabled_github = false;
-    if telegram_token.is_some() && !telegram_token.unwrap_or("").trim().is_empty() {
-        enabled_telegram = true;
-    }
-    if discord_token.is_some() && !discord_token.unwrap_or("").trim().is_empty() {
-        enabled_discord = true;
-    }
-    if github_token.is_some() && !github_token.unwrap_or("").trim().is_empty() {
-        enabled_github = true;
-    }
+    print_setup_summary(provider, model, telegram_token, discord_token, github_token, config_path, api_key);
+    Ok(())
+}
 
+fn resolve_provider_base(provider: &str) -> Result<&'static str> {
+    match provider {
+        "nvidia" => Ok("https://integrate.api.nvidia.com/v1"),
+        "openai" => Ok("https://api.openai.com/v1"),
+        "anthropic" => Ok("https://api.anthropic.com/v1"),
+        "openrouter" => Ok("https://openrouter.ai/api/v1"),
+        "groq" => Ok("https://api.groq.com/openai/v1"),
+        "deepseek" => Ok("https://api.deepseek.com/v1"),
+        "" => Ok(""),
+        other => bail!("Unsupported provider: {}. Use --base to specify a custom API base URL.", other),
+    }
+}
+
+fn print_setup_summary(
+    provider: &str,
+    model: &str,
+    telegram_token: Option<&str>,
+    discord_token: Option<&str>,
+    github_token: Option<&str>,
+    config_path: &PathBuf,
+    api_key: &str,
+) {
     println!("\nSummary:");
     if !provider.is_empty() {
         println!("  Provider: {}", provider);
@@ -585,16 +674,15 @@ fn non_interactive_setup(
     if !model.is_empty() {
         println!("  Model: {}", model);
     }
-    println!("  Telegram: {}", if enabled_telegram { "enabled" } else { "disabled" });
-    println!("  Discord: {}", if enabled_discord { "enabled" } else { "disabled" });
-    println!("  GitHub MCP: {}", if enabled_github { "enabled" } else { "disabled" });
+    println!("  Telegram: {}", if telegram_token.is_some() { "enabled" } else { "disabled" });
+    println!("  Discord: {}", if discord_token.is_some() { "enabled" } else { "disabled" });
+    println!("  GitHub MCP: {}", if github_token.is_some() { "enabled" } else { "disabled" });
     println!("Configuration saved to {:?}", config_path);
     println!("Next steps: Run `ahnara gateway` to start.");
     if api_key.is_empty() {
         println!("Set your API key: export OPENAI_API_KEY=your-key");
     }
-
-    Ok(())
+}
 }
 
 #[cfg(test)]

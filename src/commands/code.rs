@@ -257,23 +257,30 @@ pub async fn handle_code(
     let workspace = ensure_workspace(&session_id)?;
     init_workspace(&workspace)?;
 
-    let workspace_display = workspace.display().to_string();
-    println!("\n  Coding workspace: {}", workspace_display);
+    print_workspace_info(&workspace, &project);
 
+    let config = load_code_config()?;
+    let agent = initialize_code_agent(&config, &workspace).await?;
+
+    process_initial_task(&agent, &session_key, &task).await;
+    run_interactive_loop(agent, &session_key, &workspace).await?;
+
+    Ok(())
+}
+
+fn print_workspace_info(workspace: &std::path::Path, project: &Option<String>) {
+    println!("\n  Coding workspace: {}", workspace.display());
     if let Some(ref proj) = project {
         println!("  Project: {}", proj);
     }
-
-    // Scan existing files
-    match scan_workspace(&workspace) {
-        Ok(tree) if !tree.is_empty() => {
-            println!("  Existing files:\n{}", tree);
-        }
+    match scan_workspace(workspace) {
+        Ok(tree) if !tree.is_empty() => println!("  Existing files:\n{}", tree),
         _ => println!("  (empty workspace)"),
     }
     println!();
+}
 
-    // Load config and override persona with coding agent instructions
+fn load_code_config() -> Result<crate::config::AppConfig> {
     let config_path = dirs::home_dir()
         .map(|h| h.join(".ahnara/config.toml"))
         .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
@@ -281,7 +288,7 @@ pub async fn handle_code(
         config_path.to_str().unwrap_or("~/.ahnara/config.toml"),
     )?;
 
-    let code_prompt = build_code_system_prompt(&workspace);
+    let code_prompt = build_code_system_prompt(&std::path::Path::new("/tmp"));
     config.persona = crate::persona::PersonaConfig {
         name: "Coding Agent".to_string(),
         behavior: code_prompt,
@@ -293,20 +300,22 @@ pub async fn handle_code(
         persona_file: None,
     };
 
-    // Initialize core components
+    Ok(config)
+}
+
+async fn initialize_code_agent(
+    config: &crate::config::AppConfig,
+    workspace: &std::path::Path,
+) -> Result<Arc<crate::agent::AgentCore>> {
     let memory = Arc::new(crate::memory::MemoryEngine::new(&config.memory)?);
-    let providers = Arc::new(crate::providers::ProviderPool::new(
-        config.providers.clone(),
-    ));
+    let providers = Arc::new(crate::providers::ProviderPool::new(config.providers.clone()));
     let plugins = Arc::new(crate::plugins::PluginManager::new(config.plugins.clone()));
     let orchestrator = Arc::new(crate::orchestrator::ToolOrchestrator::new());
-    // Register coding workspace tools (read_file, edit_file, run_bash_command, etc.)
     orchestrator.register_code_tools();
+
     let session_db = shellexpand::tilde(&config.memory.database_path).into_owned();
     let db_path = std::path::Path::new(&session_db);
-    let memory_store = crate::memory::MemoryStore::new(db_path)
-        .ok()
-        .map(|s| Arc::new(s));
+    let memory_store = crate::memory::MemoryStore::new(db_path).ok().map(|s| Arc::new(s));
     let session_store = match &memory_store {
         Some(ms) => Arc::new(crate::memory::SessionStore::new_from_store(ms.clone())?),
         None => Arc::new(crate::memory::SessionStore::new(&session_db)?),
@@ -315,78 +324,59 @@ pub async fn handle_code(
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara"));
     let model_store = Arc::new(crate::memory::model_store::ModelStore::new(&data_dir)?);
-    let code_mode = Arc::new(crate::memory::CodeModeStore::new(
-        &config.memory.database_path
-    )?);
-    let checkpoint_manager = Arc::new(crate::checkpoints::CheckpointManager::new(
-        &session_db,
-    )?);
+    let code_mode = Arc::new(crate::memory::CodeModeStore::new(&config.memory.database_path)?);
+    let checkpoint_manager = Arc::new(crate::checkpoints::CheckpointManager::new(&session_db)?);
 
     let agent = Arc::new(crate::agent::AgentCore::new(
-        memory,
-        providers,
-        orchestrator,
-        config.clone(),
-        session_store,
-        code_mode,
-        model_store,
-        plugins,
-        checkpoint_manager,
-        Arc::new(parking_lot::RwLock::new((None, None))),
-        None,
-        memory_store,
+        memory, providers, orchestrator, config.clone(), session_store,
+        code_mode, model_store, plugins, checkpoint_manager,
+        Arc::new(parking_lot::RwLock::new((None, None))), None, memory_store,
     )?);
-    // Override the system prompt with the pure coding agent prompt - no persona bleeding
-    let coding_prompt = build_code_system_prompt(&workspace);
+
+    let coding_prompt = build_code_system_prompt(workspace);
     agent.set_system_prompt_override(&format!("code:{}", workspace.display()), coding_prompt).await;
 
-    // Process initial task if provided
-    let initial_task = if task.is_empty() {
-        None
-    } else {
-        Some(task.join(" "))
-    };
+    Ok(agent)
+}
 
-    if let Some(ref msg) = initial_task {
+async fn process_initial_task(agent: &Arc<crate::agent::AgentCore>, session_key: &str, task: &[String]) {
+    if !task.is_empty() {
+        let msg = task.join(" ");
         println!("  Task: {}\n", msg);
-        let response = agent.process(msg, Some(&session_key)).await;
+        let response = agent.process(&msg, Some(session_key)).await;
         println!("{}\n", response);
     }
+}
 
-    // Interactive coding loop
+async fn run_interactive_loop(
+    agent: Arc<crate::agent::AgentCore>,
+    session_key: &str,
+    workspace: &std::path::Path,
+) -> Result<()> {
+    let workspace_display = workspace.display().to_string();
     println!("Coding session active. Type 'exit' to quit, 'help' for commands.\n");
 
     let mut history = dialoguer::BasicHistory::new();
 
     loop {
-        let input: String =
-            dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                .with_prompt("code")
-                .history_with(&mut history)
-                .interact_text()?;
+        let input: String = dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+            .with_prompt("code")
+            .history_with(&mut history)
+            .interact_text()?;
 
         match input.trim() {
             "exit" | "quit" | "q" => {
                 println!("Exiting coding session. Workspace preserved at: {}", workspace_display);
                 break;
             }
-            "help" | "?" => {
-                println!("\nCoding Session Commands:");
-                println!("  exit, quit, q  - Exit coding session (workspace preserved)");
-                println!("  help, ?        - Show this help");
-                println!("  clear          - Clear session history");
-                println!("  files          - Show workspace file tree");
-                println!("  workspace      - Show workspace path");
-                println!();
-                continue;
-            }
+            "help" | "?" => print_coding_help(),
             "clear" => {
-                let _ = agent.clear_session(&session_key).await;
+                let _ = agent.clear_session(session_key).await;
                 println!("Session history cleared.");
                 continue;
             }
             "files" => {
-                match scan_workspace(&workspace) {
+                match scan_workspace(workspace) {
                     Ok(tree) if !tree.is_empty() => println!("\n{}", tree),
                     _ => println!("(empty workspace)"),
                 }
@@ -400,8 +390,22 @@ pub async fn handle_code(
             _ => {}
         }
 
-        let response = agent.process(&input, Some(&session_key)).await;
+        let response = agent.process(&input, Some(session_key)).await;
         println!("{}\n", response);
+    }
+
+    Ok(())
+}
+
+fn print_coding_help() {
+    println!("\nCoding Session Commands:");
+    println!("  exit, quit, q  - Exit coding session (workspace preserved)");
+    println!("  help, ?        - Show this help");
+    println!("  clear          - Clear session history");
+    println!("  files          - Show workspace file tree");
+    println!("  workspace      - Show workspace path");
+    println!();
+}
     }
 
     Ok(())

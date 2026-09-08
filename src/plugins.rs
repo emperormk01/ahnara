@@ -134,17 +134,35 @@ impl PluginManager {
         value: String,
     ) -> String {
         let mut current = value;
-        let context = HookContext {
+        let context = self.build_hook_context(event, session_id, &current);
+
+        match self.run_hooks(event, context).await {
+            Ok(outputs) => {
+                current = self.apply_hook_outputs(event, current, outputs);
+            }
+            Err(err) => tracing::warn!("plugin hook failed for {}: {}", event.as_str(), err),
+        }
+
+        current
+    }
+
+    fn build_hook_context(
+        &self,
+        event: HookEvent,
+        session_id: Option<&str>,
+        current: &str,
+    ) -> HookContext {
+        HookContext {
             event: event.as_str().into(),
             plugin: String::new(),
             session_id: session_id.map(str::to_string),
             message: if event == HookEvent::BeforeMessage {
-                Some(current.clone())
+                Some(current.to_string())
             } else {
                 None
             },
             response: if event == HookEvent::AfterMessage {
-                Some(current.clone())
+                Some(current.to_string())
             } else {
                 None
             },
@@ -152,28 +170,29 @@ impl PluginManager {
             tool_args: None,
             tool_result: None,
             available_tools: self.tool_specs(),
-        };
+        }
+    }
 
-        match self.run_hooks(event, context).await {
-            Ok(outputs) => {
-                for output in outputs {
-                    if let Some(error) = output.error {
-                        tracing::warn!("plugin hook reported error: {}", error);
-                    }
-                    if event == HookEvent::BeforeMessage {
-                        if let Some(message) = output.message {
-                            current = message;
-                        }
-                    } else if event == HookEvent::AfterMessage {
-                        if let Some(response) = output.response {
-                            current = response;
-                        }
-                    }
+    fn apply_hook_outputs(
+        &self,
+        event: HookEvent,
+        mut current: String,
+        outputs: Vec<HookOutput>,
+    ) -> String {
+        for output in outputs {
+            if let Some(error) = output.error {
+                tracing::warn!("plugin hook reported error: {}", error);
+            }
+            if event == HookEvent::BeforeMessage {
+                if let Some(message) = output.message {
+                    current = message;
+                }
+            } else if event == HookEvent::AfterMessage {
+                if let Some(response) = output.response {
+                    current = response;
                 }
             }
-            Err(err) => tracing::warn!("plugin hook failed for {}: {}", event.as_str(), err),
         }
-
         current
     }
 

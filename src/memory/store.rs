@@ -347,23 +347,25 @@ impl MemoryStore {
                     user_goal, completed, next_steps
              FROM sessions WHERE session_id = ?1",
         )?;
-        let mut rows = stmt.query_map(params![session_id], |row| {
-            Ok(SessionRecord {
-                session_id: row.get(0)?,
-                channel: row.get(1)?,
-                user_id: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-                message_count: row.get(5)?,
-                user_goal: row.get(6)?,
-                completed: row.get(7)?,
-                next_steps: row.get(8)?,
-            })
-        })?;
+        let mut rows = stmt.query_map(params![session_id], Self::row_to_session)?;
         match rows.next() {
             Some(r) => Ok(Some(r?)),
             None => Ok(None),
         }
+    }
+
+    fn row_to_session(row: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
+        Ok(SessionRecord {
+            session_id: row.get(0)?,
+            channel: row.get(1)?,
+            user_id: row.get(2)?,
+            created_at: row.get(3)?,
+            updated_at: row.get(4)?,
+            message_count: row.get(5)?,
+            user_goal: row.get(6)?,
+            completed: row.get(7)?,
+            next_steps: row.get(8)?,
+        })
     }
 
     pub fn list_sessions(&self, limit: usize) -> Result<Vec<SessionRecord>> {
@@ -373,19 +375,7 @@ impl MemoryStore {
                     user_goal, completed, next_steps
              FROM sessions ORDER BY updated_at DESC LIMIT ?1",
         )?;
-        let rows = stmt.query_map(params![limit as i64], |row| {
-            Ok(SessionRecord {
-                session_id: row.get(0)?,
-                channel: row.get(1)?,
-                user_id: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-                message_count: row.get(5)?,
-                user_goal: row.get(6)?,
-                completed: row.get(7)?,
-                next_steps: row.get(8)?,
-            })
-        })?;
+        let rows = stmt.query_map(params![limit as i64], Self::row_to_session)?;
         let mut result = Vec::new();
         for r in rows {
             result.push(r?);
@@ -426,38 +416,33 @@ impl MemoryStore {
     pub fn search_messages(&self, query: &str, session_id: Option<&str>, limit: usize) -> Result<Vec<MessageRecord>> {
         let conn = self.conn.lock().unwrap();
         let pattern = format!("%{}%", query);
-        let mut result = Vec::new();
-
-        if let Some(sid) = session_id {
-            let mut stmt = conn.prepare(
+        
+        let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match session_id {
+            Some(sid) => (
                 "SELECT session_id, role, content, timestamp FROM messages
                  WHERE content LIKE ?1 AND session_id = ?2
                  ORDER BY timestamp DESC LIMIT ?3",
-            )?;
-            let mut rows = stmt.query(rusqlite::params![pattern, sid, limit as i64])?;
-            while let Some(row) = rows.next()? {
-                result.push(MessageRecord {
-                    session_id: row.get(0)?,
-                    role: row.get(1)?,
-                    content: row.get(2)?,
-                    timestamp: row.get(3)?,
-                });
-            }
-        } else {
-            let mut stmt = conn.prepare(
+                vec![Box::new(pattern), Box::new(sid.to_string()), Box::new(limit as i64)],
+            ),
+            None => (
                 "SELECT session_id, role, content, timestamp FROM messages
                  WHERE content LIKE ?1
                  ORDER BY timestamp DESC LIMIT ?2",
-            )?;
-            let mut rows = stmt.query(rusqlite::params![pattern, limit as i64])?;
-            while let Some(row) = rows.next()? {
-                result.push(MessageRecord {
-                    session_id: row.get(0)?,
-                    role: row.get(1)?,
-                    content: row.get(2)?,
-                    timestamp: row.get(3)?,
-                });
-            }
+                vec![Box::new(pattern), Box::new(limit as i64)],
+            ),
+        };
+
+        let mut stmt = conn.prepare(sql)?;
+        let mut rows = stmt.query(rusqlite::params_from_iter(params.iter()))?;
+        let mut result = Vec::new();
+        
+        while let Some(row) = rows.next()? {
+            result.push(MessageRecord {
+                session_id: row.get(0)?,
+                role: row.get(1)?,
+                content: row.get(2)?,
+                timestamp: row.get(3)?,
+            });
         }
 
         Ok(result)
@@ -566,35 +551,41 @@ impl MemoryStore {
 
     // ── Reflections ──────────────────────────────────────────────────────
 
-    pub fn insert_reflection(&self, reflection: &super::reflector::Reflection) -> Result<i64> {
-        let next_steps_json = serde_json::to_string(&reflection.next_steps).unwrap_or_default();
-
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO reflections (
+    const INSERT_REFLECTION_SQL: &str = "INSERT INTO reflections (
                 session_id, reflection_type, title, narrative, user_goal,
                 completed, next_steps, user_preferences, approach_that_worked,
                 approach_that_failed, behavioral_note, evidence,
                 message_count, created_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-            params![
-                reflection.session_id,
-                reflection.reflection_type.to_string(),
-                reflection.title,
-                reflection.narrative,
-                reflection.user_goal,
-                reflection.completed,
-                next_steps_json,
-                reflection.user_preferences,
-                reflection.approach_that_worked,
-                reflection.approach_that_failed,
-                reflection.behavioral_note,
-                reflection.evidence,
-                reflection.message_count as i64,
-                reflection.created_at as i64,
-            ],
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)";
+
+    pub fn insert_reflection(&self, reflection: &super::reflector::Reflection) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let params = Self::reflection_params(reflection);
+        conn.execute(
+            Self::INSERT_REFLECTION_SQL,
+            rusqlite::params_from_iter(params.iter()),
         )?;
         Ok(conn.last_insert_rowid())
+    }
+
+    fn reflection_params(reflection: &super::reflector::Reflection) -> Vec<Box<dyn rusqlite::types::ToSql>> {
+        let next_steps_json = serde_json::to_string(&reflection.next_steps).unwrap_or_default();
+        vec![
+            Box::new(reflection.session_id.clone()),
+            Box::new(reflection.reflection_type.to_string()),
+            Box::new(reflection.title.clone()),
+            Box::new(reflection.narrative.clone()),
+            Box::new(reflection.user_goal.clone()),
+            Box::new(reflection.completed.clone()),
+            Box::new(next_steps_json),
+            Box::new(reflection.user_preferences.clone()),
+            Box::new(reflection.approach_that_worked.clone()),
+            Box::new(reflection.approach_that_failed.clone()),
+            Box::new(reflection.behavioral_note.clone()),
+            Box::new(reflection.evidence.clone()),
+            Box::new(reflection.message_count as i64),
+            Box::new(reflection.created_at as i64),
+        ]
     }
 
     pub fn get_reflections(
@@ -742,16 +733,18 @@ impl MemoryStore {
 
     // ── User Preferences ─────────────────────────────────────────────────
 
-    pub fn upsert_preference(&self, pref: &UserPreference) -> Result<()> {
-        let now = now_secs();
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO user_preferences (user_id, category, preference, confidence, source, last_reinforced, created_at)
+    const UPSERT_PREFERENCE_SQL: &str = "INSERT INTO user_preferences (user_id, category, preference, confidence, source, last_reinforced, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(user_id, category, preference) DO UPDATE SET
                 confidence = MAX(user_preferences.confidence, excluded.confidence),
                 source = COALESCE(excluded.source, user_preferences.source),
-                last_reinforced = excluded.last_reinforced",
+                last_reinforced = excluded.last_reinforced";
+
+    pub fn upsert_preference(&self, pref: &UserPreference) -> Result<()> {
+        let now = now_secs();
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            Self::UPSERT_PREFERENCE_SQL,
             params![
                 pref.user_id,
                 pref.category,
@@ -866,35 +859,45 @@ impl MemoryStore {
         Ok(result)
     }
 
+    const SEARCH_FACTS_SQL: &str = "SELECT f.key, f.value, f.source, f.confidence, f.created_at, f.updated_at
+             FROM facts f
+             WHERE f.key LIKE ?1
+             ORDER BY f.updated_at DESC
+             LIMIT ?2";
+
     pub fn search_facts(
         &self,
         query: &str,
         limit: usize,
     ) -> Result<Vec<FactRecord>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT f.key, f.value, f.source, f.confidence, f.created_at, f.updated_at
-             FROM facts f
-             WHERE f.key LIKE ?1
-             ORDER BY f.updated_at DESC
-             LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(params![format!("{}%", query), limit as i64], |row| {
-            Ok(FactRecord {
-                key: row.get(0)?,
-                value: row.get(1)?,
-                source: row.get(2)?,
-                confidence: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
-            })
-        })?;
+        let mut stmt = conn.prepare(Self::SEARCH_FACTS_SQL)?;
+        let rows = stmt.query_map(params![format!("{}%", query), limit as i64], Self::row_to_fact)?;
         let mut result = Vec::new();
         for r in rows {
             result.push(r?);
         }
         Ok(result)
     }
+
+    fn row_to_fact(row: &rusqlite::Row) -> rusqlite::Result<FactRecord> {
+        Ok(FactRecord {
+            key: row.get(0)?,
+            value: row.get(1)?,
+            source: row.get(2)?,
+            confidence: row.get(3)?,
+            created_at: row.get(4)?,
+            updated_at: row.get(5)?,
+        })
+    }
+
+    const SEARCH_SUMMARIES_SQL: &str = "SELECT cs.session_id, cs.summary, cs.original_messages,
+                    cs.compacted_messages, cs.tokens_saved, cs.created_at
+             FROM compaction_summaries cs
+             INNER JOIN summaries_fts fts ON cs.id = fts.rowid
+             WHERE summaries_fts MATCH ?1
+             ORDER BY rank
+             LIMIT ?2";
 
     pub fn search_summaries(
         &self,
@@ -903,30 +906,24 @@ impl MemoryStore {
     ) -> Result<Vec<CompactionSummaryRecord>> {
         let fts_query = format!("{}*", query.replace('"', "\"\""));
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT cs.session_id, cs.summary, cs.original_messages,
-                    cs.compacted_messages, cs.tokens_saved, cs.created_at
-             FROM compaction_summaries cs
-             INNER JOIN summaries_fts fts ON cs.id = fts.rowid
-             WHERE summaries_fts MATCH ?1
-             ORDER BY rank
-             LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(params![fts_query, limit as i64], |row| {
-            Ok(CompactionSummaryRecord {
-                session_id: row.get(0)?,
-                summary: row.get(1)?,
-                original_messages: row.get(2)?,
-                compacted_messages: row.get(3)?,
-                tokens_saved: row.get(4)?,
-                created_at: row.get(5)?,
-            })
-        })?;
+        let mut stmt = conn.prepare(Self::SEARCH_SUMMARIES_SQL)?;
+        let rows = stmt.query_map(params![fts_query, limit as i64], Self::row_to_summary)?;
         let mut result = Vec::new();
         for r in rows {
             result.push(r?);
         }
         Ok(result)
+    }
+
+    fn row_to_summary(row: &rusqlite::Row) -> rusqlite::Result<CompactionSummaryRecord> {
+        Ok(CompactionSummaryRecord {
+            session_id: row.get(0)?,
+            summary: row.get(1)?,
+            original_messages: row.get(2)?,
+            compacted_messages: row.get(3)?,
+            tokens_saved: row.get(4)?,
+            created_at: row.get(5)?,
+        })
     }
 
     /// Unified full-text search across all memory types
@@ -1151,15 +1148,7 @@ fn parse_reflection(
     use super::reflector::{Reflection, ReflectionType};
 
     let type_str: String = row.get(1)?;
-    let reflection_type = match type_str.as_str() {
-        "bugfix" => ReflectionType::Bugfix,
-        "feature" => ReflectionType::Feature,
-        "research" => ReflectionType::Research,
-        "question" => ReflectionType::Question,
-        "habit" => ReflectionType::Habit,
-        "preference" => ReflectionType::Preference,
-        _ => ReflectionType::Other,
-    };
+    let reflection_type = parse_reflection_type(&type_str);
 
     let next_steps_str: Option<String> = row.get(6)?;
     let next_steps: Vec<String> = next_steps_str
@@ -1182,6 +1171,19 @@ fn parse_reflection(
         message_count: row.get::<_, i64>(12)? as usize,
         created_at: row.get::<_, i64>(13)? as u64,
     })
+}
+
+fn parse_reflection_type(type_str: &str) -> super::reflector::ReflectionType {
+    use super::reflector::ReflectionType;
+    match type_str {
+        "bugfix" => ReflectionType::Bugfix,
+        "feature" => ReflectionType::Feature,
+        "research" => ReflectionType::Research,
+        "question" => ReflectionType::Question,
+        "habit" => ReflectionType::Habit,
+        "preference" => ReflectionType::Preference,
+        _ => ReflectionType::Other,
+    }
 }
 
 fn parse_observation(row: &rusqlite::Row) -> rusqlite::Result<Observation> {

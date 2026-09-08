@@ -138,73 +138,158 @@ pub fn handle_callback(
 
     match parts.get(0) {
         Some(&"model") => match parts.get(1) {
-            Some(&"provider") => {
-                // User selected a provider type
-                let provider_id = parts.get(2).copied().unwrap_or("custom");
-                let provider = find_provider(provider_id).unwrap_or(&PROVIDERS[6]); // default to custom
-
-                let mut ov = store.get(channel, user_id)?.unwrap_or_default();
-                ov.provider_type = Some(provider_id.to_string());
-
-                if provider_id == "custom" {
-                    // Custom endpoints need more info: sub-type + base URL
-                    ov.base_url = None; // clear - user must provide
-                    ov.updated_at = now_secs();
-                    store.set(channel, user_id, &ov)?;
-                    update_config_provider(store, channel, user_id)?;
-
-                    // Show sub-type keyboard: OpenAI-compatible vs Anthropic
-                    let keyboard_json = custom_subtype_keyboard_json();
-                    let msg = format!(
-                        "Custom Endpoint selected.\n\n\
-                         First, choose the API format your endpoint speaks:"
-                    );
-                    return Ok((msg, Some(keyboard_json), false));
-                }
-
-                ov.base_url = Some(provider.default_base.to_string());
-                ov.updated_at = now_secs();
-                store.set(channel, user_id, &ov)?;
-                update_config_provider(store, channel, user_id)?;
-
-                let msg = format!(
-                    "**{} selected.**\n\n\
-                     Send your API key:\n```\n/model key YOUR_KEY\n```\n\n\
-                     Key format: `{}`\n\
-                     Auth: `{}`\n\n\
-                     Security: Keys are AES-256-GCM encrypted at rest.",
-                    provider.name, provider.key_prefix_hint, provider.auth_header
-                );
-
-                Ok((msg, None, true))
-            }
-            Some(&"reset") => {
-                if store.delete(channel, user_id)? {
-                    Ok(("Override cleared. Using global defaults.".into(), None, true))
-                } else {
-                    Ok(("No override was set.".into(), None, true))
-                }
-            }
+            Some(&"provider") => handle_provider_selection(store, channel, user_id, &parts),
+            Some(&"reset") => handle_reset(store, channel, user_id),
             Some(&"cancel") => Ok(("Cancelled.".into(), None, true)),
-            Some(&"custom_subtype") => {
-                // User chose OpenAI-compatible or Anthropic format for a custom endpoint
-                let sub = parts.get(2).copied().unwrap_or("openai-compatible");
-                let label = if sub == "anthropic" { "Anthropic-style" } else { "OpenAI-compatible" };
+            Some(&"custom_subtype") => handle_custom_subtype_selection(store, channel, user_id, &parts),
+            Some(&"url") => handle_url_selection(store, channel, user_id, &parts),
+            Some(&"key") => handle_key_selection(store, channel, user_id, &parts),
+            Some(&"id") => handle_model_id_selection(store, channel, user_id, &parts),
+            _ => Ok(("Unknown action.".into(), None, true)),
+        },
+        _ => Ok(("Unknown callback.".into(), None, true)),
+    }
+}
 
-                let mut ov = store.get(channel, user_id)?.unwrap_or_default();
-                ov.provider_type = Some(format!("custom/{}", sub));
-                ov.base_url = None;
-                ov.updated_at = now_secs();
-                store.set(channel, user_id, &ov)?;
-                update_config_provider(store, channel, user_id)?;
+fn handle_provider_selection(
+    store: &ModelStore,
+    channel: &str,
+    user_id: &str,
+    parts: &[&str],
+) -> Result<(String, Option<String>, bool)> {
+    let provider_id = parts.get(2).copied().unwrap_or("custom");
+    let provider = find_provider(provider_id).unwrap_or(&PROVIDERS[6]);
 
-                let msg = format!(
-                    "**{label} API format selected.**\n\n\
-                     Now set your endpoint, key, and model:\n\n\
-                     ```\n/model url https://your-api.example.com/v1\n\
-                     /model key YOUR_KEY\n\
-                     /model id MODEL_NAME\n```"
-                );
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    ov.provider_type = Some(provider_id.to_string());
+
+    if provider_id == "custom" {
+        ov.base_url = None;
+        ov.updated_at = now_secs();
+        store.set(channel, user_id, &ov)?;
+        update_config_provider(store, channel, user_id)?;
+
+        let keyboard_json = custom_subtype_keyboard_json();
+        let msg = "Custom Endpoint selected.\n\nFirst, choose the API format your endpoint speaks:".to_string();
+        return Ok((msg, Some(keyboard_json), false));
+    }
+
+    ov.base_url = Some(provider.default_base.to_string());
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+    update_config_provider(store, channel, user_id)?;
+
+    let msg = format!(
+        "**{} selected.**\n\n\
+         Send your API key:\n```\n/model key YOUR_KEY\n```\n\n\
+         Key format: `{}`\n\
+         Auth: `{}`\n\n\
+         Security: Keys are AES-256-GCM encrypted at rest.",
+        provider.name, provider.key_prefix_hint, provider.auth_header
+    );
+
+    Ok((msg, None, true))
+}
+
+fn handle_reset(
+    store: &ModelStore,
+    channel: &str,
+    user_id: &str,
+) -> Result<(String, Option<String>, bool)> {
+    if store.delete(channel, user_id)? {
+        Ok(("Override cleared. Using global defaults.".into(), None, true))
+    } else {
+        Ok(("No override was set.".into(), None, true))
+    }
+}
+
+fn handle_custom_subtype_selection(
+    store: &ModelStore,
+    channel: &str,
+    user_id: &str,
+    parts: &[&str],
+) -> Result<(String, Option<String>, bool)> {
+    let sub = parts.get(2).copied().unwrap_or("openai-compatible");
+    let label = if sub == "anthropic" { "Anthropic-style" } else { "OpenAI-compatible" };
+
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    ov.provider_type = Some(format!("custom/{}", sub));
+    ov.base_url = None;
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+    update_config_provider(store, channel, user_id)?;
+
+    let msg = format!(
+        "**{label} API format selected.**\n\n\
+         Now set your endpoint, key, and model:\n\n\
+         ```\n/model url https://your-api.example.com/v1\n\
+         /model key YOUR_KEY\n\
+         /model id MODEL_NAME\n```"
+    );
+
+    Ok((msg, None, true))
+}
+
+fn handle_url_selection(
+    store: &ModelStore,
+    channel: &str,
+    user_id: &str,
+    parts: &[&str],
+) -> Result<(String, Option<String>, bool)> {
+    let url = parts.get(2).copied().unwrap_or("");
+    if url.is_empty() {
+        return Ok(("No URL provided.".into(), None, true));
+    }
+
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    ov.base_url = Some(url.to_string());
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+    update_config_provider(store, channel, user_id)?;
+
+    Ok((format!("Endpoint set to: {}", url), None, true))
+}
+
+fn handle_key_selection(
+    store: &ModelStore,
+    channel: &str,
+    user_id: &str,
+    parts: &[&str],
+) -> Result<(String, Option<String>, bool)> {
+    let key = parts.get(2).copied().unwrap_or("");
+    if key.is_empty() {
+        return Ok(("No key provided.".into(), None, true));
+    }
+
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    let encrypted = store.encrypt_key(key)?;
+    ov.encrypted_api_key = Some(encrypted);
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+
+    let masked = mask_key(key);
+    Ok((format!("API key saved: `{}`", masked), None, true))
+}
+
+fn handle_model_id_selection(
+    store: &ModelStore,
+    channel: &str,
+    user_id: &str,
+    parts: &[&str],
+) -> Result<(String, Option<String>, bool)> {
+    let model_id = parts.get(2).copied().unwrap_or("");
+    if model_id.is_empty() {
+        return Ok(("No model ID provided.".into(), None, true));
+    }
+
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    ov.model_id = Some(model_id.to_string());
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+    update_config_provider(store, channel, user_id)?;
+
+    Ok((format!("Model set to: {}", model_id), None, true))
+}
                 Ok((msg, None, true))
             }
             _ => Ok((format_help(), None, true)),
@@ -222,94 +307,138 @@ pub fn handle_model(
 ) -> Result<String> {
     let args = args.trim();
 
-    // /model with no args - show current status + keyboard
     if args.is_empty() {
         return show_current(store, channel, user_id);
     }
 
-    // /model reset
     if args == "reset" {
-        if store.delete(channel, user_id)? {
-            return Ok("Model override cleared. Using global defaults.".into());
-        } else {
-            return Ok("No model override was set.".into());
-        }
+        return handle_model_reset(store, channel, user_id);
     }
 
-    // Parse subcommands: provider <type>, key <key>, id <model_id>
     let tokens: Vec<&str> = args.splitn(3, ' ').collect();
 
     match tokens.as_slice() {
-        ["provider", pt, ..] => {
-            let provider = find_provider(pt).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Unknown provider: {}. Available: {}",
-                    pt,
-                    PROVIDERS.iter().map(|p| p.id).collect::<Vec<_>>().join(", ")
-                )
-            })?;
-
-            let mut ov = store.get(channel, user_id)?.unwrap_or_default();
-            ov.provider_type = Some(provider.id.to_string());
-            ov.base_url = Some(provider.default_base.to_string());
-            ov.updated_at = now_secs();
-            store.set(channel, user_id, &ov)?;
-            update_config_provider(store, channel, user_id)?;
-
+        ["provider", pt, ..] => handle_model_provider(store, channel, user_id, pt),
+        ["key", rest, ..] => handle_model_key(store, channel, user_id, rest),
+        ["url", rest, ..] => handle_model_url(store, channel, user_id, rest),
+        ["id", rest, ..] => handle_model_id(store, channel, user_id, rest),
+        ["subtype", rest, ..] => handle_model_subtype(store, channel, user_id, rest),
+        _ => {
+            let available = PROVIDERS.iter().map(|p| p.id).collect::<Vec<_>>().join(", ");
             Ok(format!(
-                "Provider set to **{}**.\nDefault endpoint: {}\nNext: /model key YOUR_KEY",
-                provider.name, provider.default_base
+                "Unknown subcommand. Available: provider ({})\n\n\
+                 Usage:\n\
+                 /model provider <type>  - Set provider\n\
+                 /model key <key>        - Set API key\n\
+                 /model url <url>        - Set base URL\n\
+                 /model id <model>       - Set model ID\n\
+                 /model subtype <type>   - Set custom subtype\n\
+                 /model reset            - Clear override",
+                available
             ))
         }
-        ["key", rest, ..] => {
-            let key = rest.trim();
-            if key.is_empty() || key.len() < 4 {
-                return Ok("Please provide a valid API key: /model key sk-xxx".into());
-            }
+    }
+}
 
-            let mut ov = store.get(channel, user_id)?.unwrap_or_default();
-            let encrypted = store.encrypt_key(key)?;
-            ov.encrypted_api_key = Some(encrypted);
-            ov.updated_at = now_secs();
-            store.set(channel, user_id, &ov)?;
-            update_config_provider(store, channel, user_id)?;
+fn handle_model_reset(store: &ModelStore, channel: &str, user_id: &str) -> Result<String> {
+    if store.delete(channel, user_id)? {
+        Ok("Model override cleared. Using global defaults.".into())
+    } else {
+        Ok("No model override was set.".into())
+    }
+}
 
-            let masked = mask_key(key);
-            Ok(format!(
-                "API key saved: {}\nNext: /model url https://your-api.example.com/v1 (if not set) | /model id MODEL_NAME",
-                masked
-            ))
-        }
-        ["url", rest, ..] => {
-            let url = rest.trim();
-            if url.is_empty() || (!url.starts_with("http://") && !url.starts_with("https://")) {
-                return Ok("Please provide a valid URL: /model url https://your-api.example.com/v1".into());
-            }
+fn handle_model_provider(store: &ModelStore, channel: &str, user_id: &str, pt: &str) -> Result<String> {
+    let provider = find_provider(pt).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Unknown provider: {}. Available: {}",
+            pt,
+            PROVIDERS.iter().map(|p| p.id).collect::<Vec<_>>().join(", ")
+        )
+    })?;
 
-            let mut ov = store.get(channel, user_id)?.unwrap_or_default();
-            ov.base_url = Some(url.to_string());
-            ov.updated_at = now_secs();
-            store.set(channel, user_id, &ov)?;
-            update_config_provider(store, channel, user_id)?;
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    ov.provider_type = Some(provider.id.to_string());
+    ov.base_url = Some(provider.default_base.to_string());
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+    update_config_provider(store, channel, user_id)?;
 
-            let next = if ov.encrypted_api_key.is_some() {
-                "Next: /model id MODEL_NAME".to_string()
-            } else {
-                "Next: /model key YOUR_KEY".to_string()
-            };
-            Ok(format!("Base URL set to: {}\n{}", url, next))
-        }
-        ["id", rest, ..] => {
-            let model_id = rest.trim();
-            if model_id.is_empty() {
-                return Ok("Please specify a model ID: /model id gpt-4o".into());
-            }
+    Ok(format!(
+        "Provider set to **{}**.\nDefault endpoint: {}\nNext: /model key YOUR_KEY",
+        provider.name, provider.default_base
+    ))
+}
 
-            let mut ov = store.get(channel, user_id)?.unwrap_or_default();
-            ov.model_id = Some(model_id.to_string());
-            ov.updated_at = now_secs();
-            store.set(channel, user_id, &ov)?;
-            update_config_provider(store, channel, user_id)?;
+fn handle_model_key(store: &ModelStore, channel: &str, user_id: &str, rest: &str) -> Result<String> {
+    let key = rest.trim();
+    if key.is_empty() || key.len() < 4 {
+        return Ok("Please provide a valid API key: /model key sk-xxx".into());
+    }
+
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    let encrypted = store.encrypt_key(key)?;
+    ov.encrypted_api_key = Some(encrypted);
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+    update_config_provider(store, channel, user_id)?;
+
+    let masked = mask_key(key);
+    Ok(format!(
+        "API key saved: {}\nNext: /model url https://your-api.example.com/v1 (if not set) | /model id MODEL_NAME",
+        masked
+    ))
+}
+
+fn handle_model_url(store: &ModelStore, channel: &str, user_id: &str, rest: &str) -> Result<String> {
+    let url = rest.trim();
+    if url.is_empty() || (!url.starts_with("http://") && !url.starts_with("https://")) {
+        return Ok("Please provide a valid URL: /model url https://your-api.example.com/v1".into());
+    }
+
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    ov.base_url = Some(url.to_string());
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+    update_config_provider(store, channel, user_id)?;
+
+    let next = if ov.encrypted_api_key.is_some() {
+        "Next: /model id MODEL_NAME".to_string()
+    } else {
+        "Next: /model key YOUR_KEY".to_string()
+    };
+    Ok(format!("Base URL set to: {}\n{}", url, next))
+}
+
+fn handle_model_id(store: &ModelStore, channel: &str, user_id: &str, rest: &str) -> Result<String> {
+    let model_id = rest.trim();
+    if model_id.is_empty() {
+        return Ok("Please specify a model ID: /model id gpt-4o".into());
+    }
+
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    ov.model_id = Some(model_id.to_string());
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+    update_config_provider(store, channel, user_id)?;
+
+    Ok(format!("Model set to: {}", model_id))
+}
+
+fn handle_model_subtype(store: &ModelStore, channel: &str, user_id: &str, rest: &str) -> Result<String> {
+    let subtype = rest.trim();
+    if subtype.is_empty() {
+        return Ok("Please specify a subtype: /model subtype openai-compatible".into());
+    }
+
+    let mut ov = store.get(channel, user_id)?.unwrap_or_default();
+    ov.provider_type = Some(format!("custom/{}", subtype));
+    ov.updated_at = now_secs();
+    store.set(channel, user_id, &ov)?;
+    update_config_provider(store, channel, user_id)?;
+
+    Ok(format!("Subtype set to: {}", subtype))
+}
 
             let summary = build_summary("telegram", user_id, &ov);
             Ok(format!("Model ID updated to **{}**.\n\n{}", model_id, summary))
@@ -465,69 +594,106 @@ pub fn update_config_provider(
         .map(|h| h.join(".ahnara/config.toml"))
         .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
 
-    // Read existing config or start fresh
-    let mut doc: toml::Value = if config_path.exists() {
-        let raw = std::fs::read_to_string(&config_path)?;
-        toml::from_str(&raw).unwrap_or_else(|_| toml::Value::Table(Default::default()))
-    } else {
-        toml::Value::Table(Default::default())
+    let mut doc = load_or_create_config(&config_path)?;
+
+    update_agent_model(&mut doc, &ov);
+
+    let (base_url, api_key) = match extract_provider_credentials(store, &ov)? {
+        Some((u, k)) => (u, k),
+        None => return save_config(&config_path, &doc),
     };
 
-    // Always write model_id to [agent] if set -- this is the cross-channel
-    // persistence the user needs.  Does NOT require provider credentials.
-    if let Some(ref model_id) = ov.model_id {
-        if !model_id.is_empty() {
-            let agent_table = doc.as_table_mut()
-                .unwrap()
-                .entry("agent".to_string())
-                .or_insert_with(|| toml::Value::Table(Default::default()))
-                .as_table_mut()
-                .ok_or_else(|| anyhow::anyhow!("[agent] is not a table"))?;
-            agent_table.insert("default_model".to_string(), toml::Value::String(model_id.clone()));
-        }
-    }
-
-    // Write provider entry only when we have enough data
-    let base_url = match &ov.base_url {
-        Some(u) if !u.is_empty() => u.clone(),
-        _ => {
-            // No base_url -- just write the model and return
-            let rendered = toml::to_string_pretty(&doc)?;
-            std::fs::write(&config_path, &rendered)?;
-            tighten_config_permissions(&config_path);
-            tracing::info!("Updated config.toml with model '{}'", ov.model_id.as_deref().unwrap_or("(none)"));
-            return Ok(());
-        }
-    };
-    let api_key = match &ov.encrypted_api_key {
-        Some(enc) => store.decrypt_key(enc)?,
-        None => {
-            // No api_key -- just write the model and return
-            let rendered = toml::to_string_pretty(&doc)?;
-            std::fs::write(&config_path, &rendered)?;
-            tighten_config_permissions(&config_path);
-            tracing::info!("Updated config.toml with model '{}'", ov.model_id.as_deref().unwrap_or("(none)"));
-            return Ok(());
-        }
-    };
     let provider_type = ov.provider_type.clone().unwrap_or_else(|| "custom".into());
     let model_id = ov.model_id.clone().unwrap_or_default();
 
-    // Build the provider entry
-    let name = provider_type.clone();
+    update_providers_section(&mut doc, &provider_type, &api_key, &base_url, &model_id);
+
+    save_config(&config_path, &doc)
+}
+
+fn load_or_create_config(config_path: &std::path::Path) -> Result<toml::Value> {
+    if config_path.exists() {
+        let raw = std::fs::read_to_string(config_path)?;
+        Ok(toml::from_str(&raw).unwrap_or_else(|_| toml::Value::Table(Default::default())))
+    } else {
+        Ok(toml::Value::Table(Default::default()))
+    }
+}
+
+fn update_agent_model(doc: &mut toml::Value, ov: &crate::memory::model_store::UserModelOverride) {
+    if let Some(ref model_id) = ov.model_id {
+        if !model_id.is_empty() {
+            if let Some(agent_table) = doc.as_table_mut()
+                .unwrap()
+                .entry("agent".to_string())
+                .or_insert_with(|| toml::Value::Table(Default::default()))
+                .as_table_mut() {
+                agent_table.insert("default_model".to_string(), toml::Value::String(model_id.clone()));
+            }
+        }
+    }
+}
+
+fn extract_provider_credentials(
+    store: &ModelStore,
+    ov: &crate::memory::model_store::UserModelOverride,
+) -> Result<Option<(String, String)>> {
+    let base_url = match &ov.base_url {
+        Some(u) if !u.is_empty() => u.clone(),
+        _ => return Ok(None),
+    };
+    let api_key = match &ov.encrypted_api_key {
+        Some(enc) => store.decrypt_key(enc)?,
+        None => return Ok(None),
+    };
+    Ok(Some((base_url, api_key)))
+}
+
+fn update_providers_section(
+    doc: &mut toml::Value,
+    provider_type: &str,
+    api_key: &str,
+    base_url: &str,
+    model_id: &str,
+) {
     let entry = toml::Value::Table({
         let mut t = toml::map::Map::new();
-        t.insert("name".into(), toml::Value::String(name.clone()));
-        t.insert("api_key".into(), toml::Value::String(api_key));
-        t.insert("api_base".into(), toml::Value::String(base_url));
+        t.insert("name".into(), toml::Value::String(provider_type.into()));
+        t.insert("api_key".into(), toml::Value::String(api_key.into()));
+        t.insert("api_base".into(), toml::Value::String(base_url.into()));
+        if !model_id.is_empty() {
+            t.insert("model".into(), toml::Value::String(model_id.into()));
+        }
         t
     });
 
-    // Update [providers] section
-    let providers_table = doc.as_table_mut()
+    if let Some(providers_table) = doc.as_table_mut()
         .unwrap()
         .entry("providers".to_string())
         .or_insert_with(|| toml::Value::Table(Default::default()))
+        .as_table_mut() {
+        let arr = providers_table
+            .entry("providers".to_string())
+            .or_insert_with(|| toml::Value::Array(vec![]))
+            .as_array_mut()
+            .unwrap();
+
+        if let Some(idx) = arr.iter().position(|e| e.get("name").and_then(|n| n.as_str()) == Some(provider_type)) {
+            arr[idx] = entry;
+        } else {
+            arr.push(entry);
+        }
+
+        providers_table.insert("active".to_string(), toml::Value::String(provider_type.into()));
+    }
+}
+
+fn save_config(config_path: &std::path::Path, doc: &toml::Value) -> Result<()> {
+    let rendered = toml::to_string_pretty(doc)?;
+    std::fs::write(config_path, &rendered)?;
+    tighten_config_permissions(config_path);
+    Ok(())
+}
         .as_table_mut()
         .ok_or_else(|| anyhow::anyhow!("[providers] is not a table"))?;
 

@@ -133,11 +133,7 @@ fn default_true() -> bool {
     true
 }
 
-impl Default for PersonaConfig {
-    fn default() -> Self {
-        Self {
-            name: "AHNARA".into(),
-            behavior: r#"You have opinions. Strong ones. Stop hedging with "it depends" - commit to a take.
+const DEFAULT_BEHAVIOR: &str = r#"You have opinions. Strong ones. Stop hedging with "it depends" - commit to a take.
 
 Delete every rule that sounds corporate. If it could appear in an employee handbook, it doesn't belong here.
 
@@ -183,7 +179,13 @@ Find: `find role button click --name Submit` | `find text "Sign In" click` | `fi
 
 Auth: `--profile <path>` (persistent cookies) | `--session-name <name>` (auto-save/restore) | `--state <path>` (JSON auth) | `--auto-connect` (reuse running Chrome)
 
-**Workflow**: `snapshot -i` to get @refs → `click`/`fill` by ref → `get text` to extract → `screenshot --annotate` for visual context. Always use @refs from snapshot, not CSS selectors."#.into(),
+**Workflow**: `snapshot -i` to get @refs → `click`/`fill` by ref → `get text` to extract → `screenshot --annotate` for visual context. Always use @refs from snapshot, not CSS selectors."#;
+
+impl Default for PersonaConfig {
+    fn default() -> Self {
+        Self {
+            name: "AHNARA".into(),
+            behavior: DEFAULT_BEHAVIOR.into(),
             style: StyleConfig::default(),
             persona_file: None,
         }
@@ -254,107 +256,120 @@ impl SystemPromptBuilder {
         self.tools_description = if tools.is_empty() {
             "No tools available.".into()
         } else {
-            let mut desc = String::from("## Available Tools\n\n");
-            desc.push_str("You have access to the following tools. Use them when helpful.\n\n");
-
-            // Categorize tools
-            desc.push_str("### File Operations\n");
-            for tool in tools.iter().filter(|t| t.function.name.starts_with("file")) {
-                desc.push_str(&self.format_tool_with_usage(tool));
-            }
-
-            desc.push_str("\n### Web & Search\n");
-            for tool in tools.iter().filter(|t| {
-                ["web_search", "web_fetch", "x_fetch"].contains(&t.function.name.as_str())
-            }) {
-                desc.push_str(&self.format_tool_with_usage(tool));
-            }
-
-            desc.push_str("\n### Browser Automation\n");
-            for tool in tools
-                .iter()
-                .filter(|t| t.function.name.starts_with("browser"))
-            {
-                desc.push_str(&self.format_tool_with_usage(tool));
-            }
-
-            desc.push_str("\n### Execution\n");
-            for tool in tools.iter().filter(|t| t.function.name == "execute") {
-                desc.push_str(&self.format_tool_with_usage(tool));
-            }
-
-            desc.push_str("\n### Code Execution\n");
-            for tool in tools.iter().filter(|t| {
-                ["execute_code", "execute_parallel", "execute_script"]
-                    .contains(&t.function.name.as_str())
-            }) {
-                desc.push_str(&self.format_tool_with_usage(tool));
-            }
-
-            desc.push_str("\n### Memory\n");
-            for tool in tools.iter().filter(|t| t.function.name == "memory") {
-                desc.push_str(&self.format_tool_with_usage(tool));
-            }
-
-            desc.push_str("\n### Other Tools\n");
-            for tool in tools.iter().filter(|t| {
-                !t.function.name.starts_with("file")
-                    && !["web_search", "web_fetch", "x_fetch"].contains(&t.function.name.as_str())
-                    && !t.function.name.starts_with("browser")
-                    && ![
-                        "execute",
-                        "execute_code",
-                        "execute_parallel",
-                        "execute_script",
-                    ]
-                    .contains(&t.function.name.as_str())
-                    && t.function.name != "memory"
-            }) {
-                desc.push_str(&self.format_tool_with_usage(tool));
-            }
-
-            desc.push_str("\n## Tool Usage\n\n");
-            desc.push_str("When you need to use a tool, make a tool call. The system will execute it and return the result.\n");
-            desc.push_str(
-                "You can make multiple tool calls in a single response if they are independent.\n",
-            );
-            desc.push_str("After receiving tool results, synthesize the information and respond to the user.\n");
-
-            // Agent Capabilities - explicit list of what the agent CAN do
-            desc.push_str("\n## Agent Capabilities\n\n");
-            desc.push_str("You have significant autonomous capabilities. You CAN:\n\n");
-            desc.push_str(
-                "- **Browse the web** using agent-browser (by Vercel) (open, click, type, read, screenshot)\n",
-            );
-            desc.push_str("- **Fill out forms** on websites and interact with UI elements\n");
-            desc.push_str(
-                "- **Create accounts** on websites that do not require phone/SMS verification\n",
-            );
-            desc.push_str(
-                "- **Make authenticated requests** if given credentials or tokens\n",
-            );
-            desc.push_str(
-                "- **Execute code** using the execute_code tool (Python, TypeScript, Shell)\n",
-            );
-            desc.push_str("- **Read and write files** anywhere on the system\n");
-            desc.push_str("- **Search the web** using webserp (multi-engine: Google, DuckDuckGo, Brave, Yahoo, Mojeek, Startpage, Presearch. No API key required)\n");
-            desc.push_str("- **Fetch full page content** via agent-browser engine\n");
-            desc.push_str("- **Fetch tweets** from X/Twitter by ID\n");
-            desc.push_str("- **Send messages proactively** to the user via connected platforms mid-task (progress updates, milestones, status reports)\n");
-            desc.push_str("- **Delegate subtasks to sub-agents** that run in parallel, enabling concurrent research, coding, or analysis\n\n");
-            desc.push_str("- **Manage scheduled jobs** using create_scheduled_job, update_scheduled_job, delete_scheduled_job, list_scheduled_jobs -- set up recurring autonomous tasks with cron expressions\n");
-            desc.push_str("- **Coordinate multi-agent work** using the blackboard (shared state with TTL/tags) and orchestrate tool (launch parallel sub-agents with shared context)\n");
-            desc.push_str("- **Analyze images** using analyze_image -- send images to the vision model for understanding\n");
-            desc.push_str("- **Analyze videos** using analyze_video -- extract key frames from video and analyze with vision\n");
-            desc.push_str("- **Read documents** using read_document -- extract text from PDFs\n");
-            desc.push_str("- **Return structured output** using output -- return JSON, CSV, files, images, videos as downloadable attachments (not just chat text)\n\n");
-            desc.push_str("You should proactively use these capabilities. Do NOT say you cannot do something if you have a tool for it.\n");
-            desc.push_str("Be confident in your abilities. You are not a passive assistant - you are an autonomous agent.\n");
-            desc.push_str("\n**For long-running tasks:** Use send_message to update the user periodically. Do not wait for the full response cycle to report progress.\n");
-            desc.push_str("\n**CRITICAL: NEVER guess or hallucinate. For ANY URL or web lookup, USE your tools (web_fetch, browser_open, web_search). Wrong answer from using a tool > confident bullshit from guessing.**\n");
-
-            desc
+            self.build_tools_description(tools)
         };
+        self
+    }
+
+    fn build_tools_description(&self, tools: &[super::orchestrator::ToolDefinition]) -> String {
+        let mut desc = String::from("## Available Tools\n\n");
+        desc.push_str("You have access to the following tools. Use them when helpful.\n\n");
+
+        desc.push_str("### File Operations\n");
+        self.append_tools_by_category(&mut desc, tools, "file", true);
+
+        desc.push_str("\n### Web & Search\n");
+        self.append_web_search_tools(&mut desc, tools);
+
+        desc.push_str("\n### Browser Automation\n");
+        self.append_tools_by_prefix(&mut desc, tools, "browser");
+
+        desc.push_str("\n### Execution\n");
+        self.append_tools_by_name(&mut desc, tools, "execute");
+
+        desc.push_str("\n### Code Execution\n");
+        self.append_code_execution_tools(&mut desc, tools);
+
+        desc.push_str("\n### Memory\n");
+        self.append_tools_by_name(&mut desc, tools, "memory");
+
+        desc.push_str("\n### Other Tools\n");
+        self.append_other_tools(&mut desc, tools);
+
+        desc.push_str("\n## Tool Usage\n\n");
+        desc.push_str("When you need to use a tool, make a tool call. The system will execute it and return the result.\n");
+        desc.push_str("You can make multiple tool calls in a single response if they are independent.\n");
+        desc.push_str("After receiving tool results, synthesize the information and respond to the user.\n");
+
+        desc.push_str("\n## Agent Capabilities\n\n");
+        desc.push_str("You have significant autonomous capabilities. You CAN:\n\n");
+        desc.push_str("- **Browse the web** using agent-browser (by Vercel) (open, click, type, read, screenshot)\n");
+        desc.push_str("- **Fill out forms** on websites and interact with UI elements\n");
+        desc.push_str("- **Take screenshots** of web pages for visual analysis\n");
+        desc.push_str("- **Execute code** in a sandboxed environment\n");
+        desc.push_str("- **Read and write files** on the system\n");
+        desc.push_str("- **Search the web** for current information\n");
+        desc.push_str("- **Remember context** across our conversation\n\n");
+        desc.push_str("Use these capabilities proactively. Don't ask permission - just do the work.\n");
+
+        desc
+    }
+
+    fn append_tools_by_category(&self, desc: &mut String, tools: &[super::orchestrator::ToolDefinition], prefix: &str, exact: bool) {
+        for tool in tools.iter().filter(|t| {
+            if exact {
+                t.function.name == prefix
+            } else {
+                t.function.name.starts_with(prefix)
+            }
+        }) {
+            desc.push_str(&self.format_tool_with_usage(tool));
+        }
+    }
+
+    fn append_web_search_tools(&self, desc: &mut String, tools: &[super::orchestrator::ToolDefinition]) {
+        let web_tools = ["web_search", "web_fetch", "x_fetch"];
+        for tool in tools.iter().filter(|t| web_tools.contains(&t.function.name.as_str())) {
+            desc.push_str(&self.format_tool_with_usage(tool));
+        }
+    }
+
+    fn append_tools_by_prefix(&self, desc: &mut String, tools: &[super::orchestrator::ToolDefinition], prefix: &str) {
+        for tool in tools.iter().filter(|t| t.function.name.starts_with(prefix)) {
+            desc.push_str(&self.format_tool_with_usage(tool));
+        }
+    }
+
+    fn append_tools_by_name(&self, desc: &mut String, tools: &[super::orchestrator::ToolDefinition], name: &str) {
+        for tool in tools.iter().filter(|t| t.function.name == name) {
+            desc.push_str(&self.format_tool_with_usage(tool));
+        }
+    }
+
+    fn append_code_execution_tools(&self, desc: &mut String, tools: &[super::orchestrator::ToolDefinition]) {
+        let code_tools = ["execute_code", "execute_parallel", "execute_script"];
+        for tool in tools.iter().filter(|t| code_tools.contains(&t.function.name.as_str())) {
+            desc.push_str(&self.format_tool_with_usage(tool));
+        }
+    }
+
+    fn append_other_tools(&self, desc: &mut String, tools: &[super::orchestrator::ToolDefinition]) {
+        let skip_prefixes = ["file", "browser"];
+        let skip_names = ["web_search", "web_fetch", "x_fetch", "execute", "execute_code", "execute_parallel", "execute_script", "memory"];
+        
+        for tool in tools.iter().filter(|t| {
+            !skip_prefixes.iter().any(|p| t.function.name.starts_with(p))
+                && !skip_names.contains(&t.function.name.as_str())
+        }) {
+            desc.push_str(&self.format_tool_with_usage(tool));
+        }
+
+        desc.push_str("\n## Tool Usage\n\n");
+        desc.push_str("When you need to use a tool, make a tool call. The system will execute it and return the result.\n");
+        desc.push_str("You can make multiple tool calls in a single response if they are independent.\n");
+        desc.push_str("After receiving tool results, synthesize the information and respond to the user.\n");
+
+        desc.push_str("\n## Agent Capabilities\n\n");
+        desc.push_str("You have significant autonomous capabilities. You CAN:\n\n");
+        desc.push_str("- **Browse the web** using agent-browser (by Vercel) (open, click, type, read, screenshot)\n");
+        desc.push_str("- **Fill out forms** on websites and interact with UI elements\n");
+        desc.push_str("- **Take screenshots** of web pages for visual analysis\n");
+        desc.push_str("- **Execute code** in a sandboxed environment\n");
+        desc.push_str("- **Read and write files** on the system\n");
+        desc.push_str("- **Search the web** for current information\n");
+        desc.push_str("- **Remember context** across our conversation\n\n");
+        desc.push_str("Use these capabilities proactively. Don't ask permission - just do the work.\n");
+    }
         self
     }
 
@@ -364,153 +379,36 @@ impl SystemPromptBuilder {
             tool.function.name, tool.function.description
         );
 
-        // Add specific usage examples
-        match tool.function.name.as_str() {
-            "web_search" => {
-                formatted.push_str("  Usage: {\"tool\": \"web_search\", \"arguments\": {\"query\": \"search terms\", \"num_results\": 5}}\n");
-                formatted.push_str(
-                    "  - Searches the web using webserp (multi-engine, no API key required)\n",
-                );
-                formatted.push_str("  - Returns titles, URLs, and snippets\n");
-                formatted.push_str("  - Use for finding current information, news, or research\n");
-            }
-            "web_fetch" => {
-                formatted.push_str("  Usage: {\"tool\": \"web_fetch\", \"arguments\": {\"url\": \"https://example.com\", \"mode\": \"markdown\"}}\n");
-                formatted.push_str("  - Fetches full page content via agent-browser engine\n");
-                formatted.push_str("  - Modes: \"text\" (plain text), \"markdown\" (structured), \"html\" (raw)\n");
-                formatted.push_str("  - Use after web_search to get full articles\n");
-                formatted.push_str("  - Supports JS-heavy SPAs and dynamic content\n");
-            }
-            "x_fetch" => {
-                formatted.push_str("  Usage: {\"tool\": \"x_fetch\", \"arguments\": {\"tweet_id\": \"1234567890\"}}\n");
-                formatted.push_str("  - Fetches a single tweet by ID from X/Twitter\n");
-                formatted.push_str("  - Returns tweet text, author, and metadata\n");
-                formatted.push_str(
-                    "  - Use when user shares a tweet link or asks about specific tweet\n",
-                );
-            }
-            "browser_open" => {
-                formatted.push_str("  Usage: {\"tool\": \"browser_open\", \"arguments\": {\"url\": \"https://example.com\"}}\n");
-                formatted.push_str("  - Opens an agent-browser session to a URL\n");
-                formatted.push_str("  - Use for interactive browsing, forms, or authentication\n");
-            }
-            "browser_click" => {
-                formatted.push_str("  Usage: {\"tool\": \"browser_click\", \"arguments\": {\"selector\": \"button.submit\"}}\n");
-                formatted.push_str("  - Clicks an element on the current page\n");
-            }
-            "browser_type" => {
-                formatted.push_str("  Usage: {\"tool\": \"browser_type\", \"arguments\": {\"selector\": \"input#search\", \"text\": \"query\"}}\n");
-                formatted.push_str("  - Types text into an input field\n");
-            }
-            "browser_read" => {
-                formatted.push_str("  Usage: {\"tool\": \"browser_read\", \"arguments\": {}}\n");
-                formatted.push_str("  - Reads the current page content\n");
-                formatted.push_str("  - Returns page text and structure\n");
-            }
-            "browser_screenshot" => {
-                formatted
-                    .push_str("  Usage: {\"tool\": \"browser_screenshot\", \"arguments\": {}}\n");
-                formatted.push_str("  - Takes a screenshot of the current page\n");
-                formatted.push_str("  - Use for visual verification\n");
-            }
-            "browser_close" => {
-                formatted.push_str("  Usage: {\"tool\": \"browser_close\", \"arguments\": {}}\n");
-                formatted.push_str("  - Closes the browser session\n");
-            }
-            "file_read" => {
-                formatted.push_str("  Usage: {\"tool\": \"file_read\", \"arguments\": {\"path\": \"/path/to/file\"}}\n");
-                formatted.push_str("  - Reads file contents\n");
-                formatted.push_str("  - Returns full text content\n");
-            }
-            "file_write" => {
-                formatted.push_str("  Usage: {\"tool\": \"file_write\", \"arguments\": {\"path\": \"/path/to/file\", \"content\": \"text\"}}\n");
-                formatted.push_str("  - Writes content to a file\n");
-                formatted.push_str("  - Creates or overwrites the file\n");
-            }
-            "execute" => {
-                formatted.push_str(
-                    "  Usage: {\"tool\": \"execute\", \"arguments\": {\"command\": \"ls -la\"}}\n",
-                );
-                formatted.push_str("  - Executes a shell command\n");
-                formatted.push_str("  - Returns stdout, stderr, and exit code\n");
-                formatted
-                    .push_str("  - Use for system operations, scripts, or file manipulation\n");
-            }
-            "execute_code" => {
-                formatted.push_str("  Usage: {\"tool\": \"execute_code\", \"arguments\": {\"language\": \"python\", \"code\": \"print('Hello, world!')\"}}\n");
-                formatted.push_str("  - Executes code in a specified language\n");
-                formatted.push_str("  - Returns stdout, stderr, and exit code\n");
-                formatted
-                    .push_str("  - Use for running scripts, calculations, or data processing\n");
-            }
-            "memory" => {
-                formatted.push_str("  Usage: {\"tool\": \"memory\", \"arguments\": {\"action\": \"store\", \"key\": \"name\", \"value\": \"value\"}}\n");
-                formatted.push_str(
-                    "  - Store: {\"action\": \"store\", \"key\": \"...\", \"value\": \"...\"}\n",
-                );
-                formatted.push_str("  - Retrieve: {\"action\": \"retrieve\", \"key\": \"...\"}\n");
-                formatted.push_str("  - Search: {\"action\": \"search\", \"query\": \"...\"}\n");
-            }
-            "send_message" => {
-                formatted.push_str("  Usage: {\"tool\": \"send_message\", \"arguments\": {\"action\": \"send\", \"platform\": \"telegram\", \"message\": \"Status update...\"}}\n");
-                formatted.push_str("  - Send: {\"action\": \"send\", \"platform\": \"telegram\", \"message\": \"text\"}\n");
-                formatted.push_str("  - List: {\"action\": \"list\"}\n");
-                formatted.push_str("  - Use to send progress updates, milestone notifications, or status reports to the user mid-task\n");
-                formatted.push_str("  - Messages auto-chunk at platform limits (4096 chars for Telegram)\n");
-                formatted.push_str("  - Non-blocking: agent continues execution after sending\n");
-                formatted.push_str("  - Optional: {\"parse_mode\": \"markdown\"} for Telegram MarkdownV2 formatting\n");
-            }
-            "delegate_to_subagent" => {
-                formatted.push_str("  Usage: {\"tool\": \"delegate_to_subagent\", \"arguments\": {\"task\": \"Research X and summarize\", \"task_type\": \"research\", \"priority\": \"medium\"}}\n");
-                formatted.push_str("  - Delegate independent subtasks to a specialist sub-agent that runs in parallel\n");
-                formatted.push_str("  - task_type: \"research\", \"code\", \"analysis\", \"writing\", \"general\"\n");
-                formatted.push_str("  - priority: \"low\", \"medium\", \"high\", \"critical\"\n");
-                formatted.push_str("  - Sub-agent runs autonomously and returns a summary when done\n");
-                formatted.push_str("  - Use for parallelizing work: split complex tasks into independent pieces\n");
-                formatted.push_str("  - Sub-agents share the same tools and capabilities as the main agent\n");
-                formatted.push_str("  - Cost-aware: delegation is skipped if sub-agents are disabled in config\n");
-            }
-            "analyze_image" => {
-                formatted.push_str("  Usage: {\"tool\": \"analyze_image\", \"arguments\": {\"path\": \"/path/to/image.png\", \"prompt\": \"What is in this image?\"}}\n");
-                formatted.push_str("  - Analyzes an image using the vision model\n");
-                formatted.push_str("  - Supports PNG, JPEG, GIF, WebP, BMP, TIFF\n");
-                formatted.push_str("  - Use when the user sends an image attachment\n");
-            }
-            "analyze_video" => {
-                formatted.push_str("  Usage: {\"tool\": \"analyze_video\", \"arguments\": {\"path\": \"/path/to/video.mp4\", \"prompt\": \"Describe what happens\", \"max_frames\": 8}}\n");
-                formatted.push_str("  - Extracts key frames from video using ffmpeg, then analyzes with vision\n");
-                formatted.push_str("  - Supports MP4, MOV, AVI, MKV, WebM\n");
-                formatted.push_str("  - Use when the user sends a video attachment\n");
-            }
-            "read_document" => {
-                formatted.push_str("  Usage: {\"tool\": \"read_document\", \"arguments\": {\"path\": \"/path/to/document.pdf\"}}\n");
-                formatted.push_str("  - Extracts text from PDF files\n");
-                formatted.push_str("  - For scanned PDFs, use analyze_image on individual pages instead\n");
-            }
-            "create_scheduled_job" => {
-                formatted.push_str("  Usage: {\"tool\": \"create_scheduled_job\", \"arguments\": {\"name\": \"daily-report\", \"cron\": \"0 9 * * *\", \"prompt\": \"Generate daily summary\", \"enabled\": true}}\n");
-                formatted.push_str("  - Creates a recurring scheduled job with a cron expression\n");
-                formatted.push_str("  - The agent runs the given prompt autonomously at the scheduled time\n");
-                formatted.push_str("  - Use for recurring tasks: daily reports, monitoring, cleanup\n");
-            }
-            "output" => {
-                formatted.push_str("  Usage: {\"tool\": \"output\", \"arguments\": {\"format\": \"json\", \"content\": {\"key\": \"value\"}, \"filename\": \"result.json\"}}\n");
-                formatted.push_str("  - Returns structured data to the user as a downloadable file\n");
-                formatted.push_str("  - format: \"json\", \"csv\", \"markdown\", \"file\", \"image\", \"video\"\n");
-                formatted.push_str("  - For json/csv/markdown: content is the data string/object\n");
-                formatted.push_str("  - For file/image/video: content is the absolute file path\n");
-                formatted.push_str("  - filename: optional name for the download\n");
-                formatted.push_str("  - Use instead of printing large data inline\n");
-            }
-            _ => {
-                formatted.push_str(&format!(
-                    "  Parameters: {}\n",
-                    serde_json::to_string(&tool.function.parameters).unwrap_or_default()
-                ));
-            }
-        }
-
+        let usage = self.get_tool_usage(&tool.function.name);
+        formatted.push_str(usage);
         formatted
+    }
+
+    fn get_tool_usage(&self, tool_name: &str) -> &str {
+        match tool_name {
+            "web_search" => "  Usage: {\"tool\": \"web_search\", \"arguments\": {\"query\": \"search terms\", \"num_results\": 5}}\n  - Searches the web using webserp (multi-engine, no API key required)\n  - Returns titles, URLs, and snippets\n  - Use for finding current information, news, or research\n",
+            "web_fetch" => "  Usage: {\"tool\": \"web_fetch\", \"arguments\": {\"url\": \"https://example.com\", \"mode\": \"markdown\"}}\n  - Fetches full page content via agent-browser engine\n  - Modes: \"text\" (plain text), \"markdown\" (structured), \"html\" (raw)\n  - Use after web_search to get full articles\n  - Supports JS-heavy SPAs and dynamic content\n",
+            "x_fetch" => "  Usage: {\"tool\": \"x_fetch\", \"arguments\": {\"tweet_id\": \"1234567890\"}}\n  - Fetches a single tweet by ID from X/Twitter\n  - Returns tweet text, author, and metadata\n  - Use when user shares a tweet link or asks about specific tweet\n",
+            "browser_open" => "  Usage: {\"tool\": \"browser_open\", \"arguments\": {\"url\": \"https://example.com\"}}\n  - Opens an agent-browser session to a URL\n  - Use for interactive browsing, forms, or authentication\n",
+            "browser_click" => "  Usage: {\"tool\": \"browser_click\", \"arguments\": {\"selector\": \"button.submit\"}}\n  - Clicks an element on the current page\n",
+            "browser_type" => "  Usage: {\"tool\": \"browser_type\", \"arguments\": {\"selector\": \"input#search\", \"text\": \"query\"}}\n  - Types text into an input field\n",
+            "browser_read" => "  Usage: {\"tool\": \"browser_read\", \"arguments\": {}}\n  - Reads the current page content\n  - Returns page text and structure\n",
+            "browser_screenshot" => "  Usage: {\"tool\": \"browser_screenshot\", \"arguments\": {}}\n  - Takes a screenshot of the current page\n  - Use for visual verification\n",
+            "browser_close" => "  Usage: {\"tool\": \"browser_close\", \"arguments\": {}}\n  - Closes the browser session\n",
+            "file_read" => "  Usage: {\"tool\": \"file_read\", \"arguments\": {\"path\": \"/path/to/file\"}}\n  - Reads file contents\n  - Returns full text content\n",
+            "file_write" => "  Usage: {\"tool\": \"file_write\", \"arguments\": {\"path\": \"/path/to/file\", \"content\": \"text\"}}\n  - Writes content to a file\n  - Creates or overwrites the file\n",
+            "execute" => "  Usage: {\"tool\": \"execute\", \"arguments\": {\"command\": \"ls -la\"}}\n  - Executes a shell command\n  - Returns stdout, stderr, and exit code\n  - Use for system operations, scripts, or file manipulation\n",
+            "execute_code" => "  Usage: {\"tool\": \"execute_code\", \"arguments\": {\"language\": \"python\", \"code\": \"print('Hello, world!')\"}}\n  - Executes code in a specified language\n  - Returns stdout, stderr, and exit code\n  - Use for running scripts, calculations, or data processing\n",
+            "memory" => "  Usage: {\"tool\": \"memory\", \"arguments\": {\"action\": \"store\", \"key\": \"name\", \"value\": \"value\"}}\n  - Store: {\"action\": \"store\", \"key\": \"...\", \"value\": \"...\"}\n  - Retrieve: {\"action\": \"retrieve\", \"key\": \"...\"}\n  - Search: {\"action\": \"search\", \"query\": \"...\"}\n",
+            "send_message" => "  Usage: {\"tool\": \"send_message\", \"arguments\": {\"action\": \"send\", \"platform\": \"telegram\", \"message\": \"Status update...\"}}\n  - Send: {\"action\": \"send\", \"platform\": \"telegram\", \"message\": \"text\"}\n  - List: {\"action\": \"list\"}\n  - Use to send progress updates, milestone notifications, or status reports to the user mid-task\n  - Messages auto-chunk at platform limits (4096 chars for Telegram)\n  - Non-blocking: agent continues execution after sending\n  - Optional: {\"parse_mode\": \"markdown\"} for Telegram MarkdownV2 formatting\n",
+            "delegate_to_subagent" => "  Usage: {\"tool\": \"delegate_to_subagent\", \"arguments\": {\"task\": \"Research X and summarize\", \"task_type\": \"research\", \"priority\": \"medium\"}}\n  - Delegate independent subtasks to a specialist sub-agent that runs in parallel\n  - task_type: \"research\", \"code\", \"analysis\", \"writing\", \"general\"\n  - priority: \"low\", \"medium\", \"high\", \"critical\"\n  - Sub-agent runs autonomously and returns a summary when done\n  - Use for parallelizing work: split complex tasks into independent pieces\n  - Sub-agents share the same tools and capabilities as the main agent\n  - Cost-aware: delegation is skipped if sub-agents are disabled in config\n",
+            "analyze_image" => "  Usage: {\"tool\": \"analyze_image\", \"arguments\": {\"path\": \"/path/to/image.png\", \"prompt\": \"What is in this image?\"}}\n  - Analyzes an image using the vision model\n  - Supports PNG, JPEG, GIF, WebP, BMP, TIFF\n  - Use when the user sends an image attachment\n",
+            "analyze_video" => "  Usage: {\"tool\": \"analyze_video\", \"arguments\": {\"path\": \"/path/to/video.mp4\", \"prompt\": \"Describe what happens\", \"max_frames\": 8}}\n  - Extracts key frames from video using ffmpeg, then analyzes with vision\n  - Supports MP4, MOV, AVI, MKV, WebM\n  - Use when the user sends a video attachment\n",
+            "read_document" => "  Usage: {\"tool\": \"read_document\", \"arguments\": {\"path\": \"/path/to/document.pdf\"}}\n  - Extracts text from PDF files\n  - For scanned PDFs, use analyze_image on individual pages instead\n",
+            "create_scheduled_job" => "  Usage: {\"tool\": \"create_scheduled_job\", \"arguments\": {\"name\": \"daily-report\", \"cron\": \"0 9 * * *\", \"prompt\": \"Generate daily summary\", \"enabled\": true}}\n  - Creates a recurring scheduled job with a cron expression\n  - The agent runs the given prompt autonomously at the scheduled time\n  - Use for recurring tasks: daily reports, monitoring, cleanup\n",
+            "output" => "  Usage: {\"tool\": \"output\", \"arguments\": {\"format\": \"json\", \"content\": {\"key\": \"value\"}, \"filename\": \"result.json\"}}\n  - Returns structured data to the user as a downloadable file\n  - format: \"json\", \"csv\", \"markdown\", \"file\", \"image\", \"video\"\n  - For json/csv/markdown: content is the data string/object\n  - For file/image/video: content is the absolute file path\n  - filename: optional name for the download\n  - Use instead of printing large data inline\n",
+            _ => "  Parameters: See tool definition\n",
+        }
     }
 
     pub fn with_skills(mut self, skills: &[(String, String)]) -> Self {

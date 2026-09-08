@@ -17,73 +17,82 @@ pub fn markdown_to_telegram(text: &str) -> String {
 fn markers_are_balanced(text: &str) -> bool {
     let chars: Vec<char> = text.chars().collect();
     for marker in ['_', '*', '~'] {
-        let mut count = 0;
-        let mut j = 0;
-        while j < chars.len() {
-            // Skip escaped chars
-            if chars[j] == '\\' && j + 1 < chars.len() {
-                j += 2;
-                continue;
-            }
-            // Skip triple-backtick code blocks
-            if chars[j] == '`' && j + 2 < chars.len() && chars[j+1] == '`' && chars[j+2] == '`' {
-                j += 3;
-                while j + 2 < chars.len() && !(chars[j] == '`' && chars[j+1] == '`' && chars[j+2] == '`') {
-                    j += 1;
-                }
-                if j + 2 < chars.len() { j += 3; }
-                continue;
-            }
-            // Skip inline code
-            if chars[j] == '`' {
-                j += 1;
-                while j < chars.len() && chars[j] != '`' {
-                    j += 1;
-                }
-                if j < chars.len() { j += 1; }
-                continue;
-            }
-            // Skip link structure [text](url) - don't count markers inside
-            if chars[j] == '[' {
-                // Find closing ]
-                let mut depth = 0;
-                let start = j;
-                j += 1;
-                while j < chars.len() && chars[j] != ']' {
-                    j += 1;
-                }
-                if j < chars.len() { j += 1; } // skip ]
-                // Check for (
-                if j < chars.len() && chars[j] == '(' {
-                    j += 1;
-                    // Find matching ) accounting for escaped \)
-                    let mut paren_depth = 1;
-                    while j < chars.len() && paren_depth > 0 {
-                        if chars[j] == '\\' && j + 1 < chars.len() {
-                            j += 2;
-                            continue;
-                        }
-                        if chars[j] == '(' { paren_depth += 1; }
-                        if chars[j] == ')' { paren_depth -= 1; }
-                        if paren_depth > 0 { j += 1; }
-                    }
-                    if j < chars.len() { j += 1; } // skip )
-                } else {
-                    // Not a link, go back and count the [ if it's the marker
-                    // Actually [ isn't one of our markers, just skip it
-                }
-                continue;
-            }
-            if chars[j] == marker {
-                count += 1;
-            }
-            j += 1;
-        }
-        if count % 2 != 0 {
+        if !count_marker_occurrences(&chars, marker) {
             return false;
         }
     }
     true
+}
+
+fn count_marker_occurrences(chars: &[char], marker: char) -> bool {
+    let mut count = 0;
+    let mut j = 0;
+    while j < chars.len() {
+        j = skip_special_region(chars, j);
+        if j < chars.len() && chars[j] == marker {
+            count += 1;
+        }
+        j += 1;
+    }
+    count % 2 == 0
+}
+
+fn skip_special_region(chars: &[char], mut j: usize) -> usize {
+    if j >= chars.len() {
+        return j;
+    }
+    if chars[j] == '\\' && j + 1 < chars.len() {
+        return j + 2;
+    }
+    if chars[j] == '`' && j + 2 < chars.len() && chars[j+1] == '`' && chars[j+2] == '`' {
+        return skip_triple_backtick(chars, j + 3);
+    }
+    if chars[j] == '`' {
+        return skip_inline_code(chars, j + 1);
+    }
+    if chars[j] == '[' {
+        return skip_link_structure(chars, j);
+    }
+    j
+}
+
+fn skip_triple_backtick(chars: &[char], mut j: usize) -> usize {
+    while j + 2 < chars.len() && !(chars[j] == '`' && chars[j+1] == '`' && chars[j+2] == '`') {
+        j += 1;
+    }
+    if j + 2 < chars.len() { j += 3; }
+    j
+}
+
+fn skip_inline_code(chars: &[char], mut j: usize) -> usize {
+    while j < chars.len() && chars[j] != '`' {
+        j += 1;
+    }
+    if j < chars.len() { j += 1; }
+    j
+}
+
+fn skip_link_structure(chars: &[char], mut j: usize) -> usize {
+    j += 1;
+    while j < chars.len() && chars[j] != ']' {
+        j += 1;
+    }
+    if j < chars.len() { j += 1; }
+    if j < chars.len() && chars[j] == '(' {
+        j += 1;
+        let mut paren_depth = 1;
+        while j < chars.len() && paren_depth > 0 {
+            if chars[j] == '\\' && j + 1 < chars.len() {
+                j += 2;
+                continue;
+            }
+            if chars[j] == '(' { paren_depth += 1; }
+            if chars[j] == ')' { paren_depth -= 1; }
+            if paren_depth > 0 { j += 1; }
+        }
+        if j < chars.len() { j += 1; }
+    }
+    j
 }
 
 fn convert_inner(text: &str) -> String {
