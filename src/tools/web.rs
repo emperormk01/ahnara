@@ -638,7 +638,7 @@ impl Tool for WebFetchTool {
         
         let start = std::time::Instant::now();
         
-        let (_ok, _) = run_agent_browser(&["open", url])?;
+        let (ok, _) = run_agent_browser(&["open", url])?;
         if !ok {
             let duration_ms = start.elapsed().as_millis() as u64;
             return Ok(ToolResult {
@@ -650,7 +650,7 @@ impl Tool for WebFetchTool {
             });
         }
         
-        let (ok, _) = run_agent_browser(&["wait", "--load", "networkidle"])?;
+        let (_ok, _) = run_agent_browser(&["wait", "--load", "networkidle"])?;
         let (ok, text) = run_agent_browser(&["get", "text"])?;
         let duration_ms = start.elapsed().as_millis() as u64;
         

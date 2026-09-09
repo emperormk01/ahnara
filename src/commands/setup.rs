@@ -683,7 +683,7 @@ mod tests {
     fn non_interactive_setup_writes_config() {
         let tmp = env::temp_dir().join(format!("ahnara-setup-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
-        let _config_path = tmp.join("config.toml");
+        let config_path = tmp.join("config.toml");
         let opts = make_opts();
 
         non_interactive_setup(&tmp, &config_path, &opts).expect("setup should succeed");
@@ -703,7 +703,7 @@ mod tests {
         // non-interactive option must succeed without ever calling bail_non_tty.
         let tmp = env::temp_dir().join(format!("ahnara-setup-no-tty-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
-        let config_path = tmp.join("config.toml");
+        let _config_path = tmp.join("config.toml");
 
         let result = handle_setup_with(false, false, false, make_opts());
         assert!(result.is_ok(), "non-interactive path must not require a TTY: {result:?}");
