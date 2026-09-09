@@ -172,6 +172,8 @@ pub struct AgentCore {
     orchestrator: Arc<ToolOrchestrator>,
     persona: PersonaConfig,
     usage: std::sync::atomic::AtomicU64,
+    prompt_usage: std::sync::atomic::AtomicU64,
+    completion_usage: std::sync::atomic::AtomicU64,
     pub sessions: RwLock<HashMap<String, SessionHistory>>,
     session_store: Arc<SessionStore>,
     code_mode: Arc<CodeModeStore>,
@@ -274,6 +276,8 @@ impl AgentCore {
             orchestrator,
             persona,
             usage: std::sync::atomic::AtomicU64::new(0),
+            prompt_usage: std::sync::atomic::AtomicU64::new(0),
+            completion_usage: std::sync::atomic::AtomicU64::new(0),
             sessions: RwLock::new(HashMap::new()),
             session_store,
             code_mode,
@@ -544,7 +548,11 @@ impl AgentCore {
         let history = self.get_history(&session_key).await;
         let reflections = self.get_reflections(&session_key).unwrap_or_else(Vec::new);
 
-        let mut system_prompt = self.build_system_prompt(&session_key).await;
+        // Prune the tool catalog to this turn's needs once. Chat turns skip
+        // the heavy categories entirely instead of rebilling them every call.
+        let filtered_tools = self.orchestrator.get_definitions_filtered(&effective_message);
+
+        let mut system_prompt = self.build_system_prompt(&session_key, &filtered_tools).await;
         tracing::debug!("=== SYSTEM PROMPT START (first 500 chars) ===");
         tracing::debug!("{}", &system_prompt[..system_prompt.len().min(500)]);
         tracing::debug!("=== SYSTEM PROMPT END ===");
@@ -590,7 +598,24 @@ impl AgentCore {
             let code_only = self.code_override(&session_key).await.is_some();
             // Digest stale tool results so context stops growing linearly.
             age_tool_results(&mut messages);
-            let request = self.build_request(&messages, code_only);
+            // Per-iteration composition log: this is where per-turn cost
+            // comes from, broken down so it stays explainable.
+            {
+                let history_chars: usize = messages.iter().map(|m| m.content.as_deref().unwrap_or("").len()).sum();
+                let tools_chars: usize = filtered_tools.iter().map(|t| t.function.description.len() + t.function.name.len()).sum();
+                tracing::info!(
+                    session = %session_key,
+                    iteration = iterations,
+                    system_chars = system_prompt.len(),
+                    tools = filtered_tools.len(),
+                    tools_chars = tools_chars,
+                    messages = messages.len(),
+                    history_chars = history_chars,
+                    est_total_chars = system_prompt.len() + tools_chars + history_chars,
+                    "Request composition"
+                );
+            }
+            let request = self.build_request(&messages, code_only, &filtered_tools);
 
             match self.providers.complete(request).await {
                 Ok(response) => {
@@ -598,6 +623,14 @@ impl AgentCore {
                     if let Some(usage) = &response.usage {
                         self.usage.fetch_add(
                             usage.total_tokens as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+                        self.prompt_usage.fetch_add(
+                            usage.prompt_tokens as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+                        self.completion_usage.fetch_add(
+                            usage.completion_tokens as u64,
                             std::sync::atomic::Ordering::Relaxed,
                         );
                     }
@@ -973,17 +1006,15 @@ impl AgentCore {
         None
     }
 
-    fn build_request(&self, messages: &[Message], code_only: bool) -> CompletionRequest {
-        let all_tools: Vec<crate::providers::ToolDefinition> = self
-            .orchestrator
-            .get_definitions()
-            .into_iter()
+    fn build_request(&self, messages: &[Message], code_only: bool, tools: &[crate::orchestrator::ToolDefinition]) -> CompletionRequest {
+        let all_tools: Vec<crate::providers::ToolDefinition> = tools
+            .iter()
             .map(|t| crate::providers::ToolDefinition {
-                tool_type: t.tool_type,
+                tool_type: t.tool_type.clone(),
                 function: crate::providers::FunctionDefinition {
-                    name: t.function.name,
-                    description: t.function.description,
-                    parameters: t.function.parameters,
+                    name: t.function.name.clone(),
+                    description: t.function.description.clone(),
+                    parameters: t.function.parameters.clone(),
                 },
             })
             .collect();
@@ -1050,10 +1081,9 @@ impl AgentCore {
         CapabilityManifest::new(&self.config, Some(&self.orchestrator))
     }
 
-    async fn build_system_prompt(&self, session_key: &str) -> String {
+    async fn build_system_prompt(&self, session_key: &str, tools: &[crate::orchestrator::ToolDefinition]) -> String {
         use crate::persona::SystemPromptBuilder;
 
-        let tools = self.orchestrator.get_definitions();
         let capability_summary = self.capability_manifest().prompt_summary();
         let mcp_summaries = self.orchestrator.mcp_summaries();
 
@@ -1372,6 +1402,14 @@ impl AgentCore {
             total_messages: 0,
             total_tokens: self.usage.load(std::sync::atomic::Ordering::Relaxed),
         }
+    }
+
+    /// Cumulative prompt/completion totals for per-session attribution.
+    pub fn usage_split(&self) -> (u64, u64) {
+        (
+            self.prompt_usage.load(std::sync::atomic::Ordering::Relaxed),
+            self.completion_usage.load(std::sync::atomic::Ordering::Relaxed),
+        )
     }
 
     pub fn model_name(&self) -> &str {

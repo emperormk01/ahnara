@@ -286,6 +286,84 @@ impl ToolOrchestrator {
             .collect()
     }
 
+    /// Per-turn tool pruning. Chat turns only need the core set; heavier
+    /// categories join when the message suggests them. Unknown names are
+    /// always sent so new and MCP tools never vanish from capability.
+    pub fn get_definitions_filtered(&self, message: &str) -> Vec<ToolDefinition> {
+        const BROWSER_TRIGGERS: &[&str] = &[
+            "http", "www.", ".com", ".org", ".net", ".io", "url", "link", "page",
+            "site", "website", "browse", "click", "screenshot", "twitter", "x.com",
+        ];
+        const CODE_TRIGGERS: &[&str] = &[
+            "code", "file", "read", "write", "edit", "run", "script", "bug",
+            "fix", "error", "function", "refactor", "terminal", "command", "grep",
+            "debug", "compile", "test",
+        ];
+        const MEDIA_TRIGGERS: &[&str] = &[
+            "image", "photo", "picture", "video", "audio", "voice", "pdf",
+            "document", "transcribe", "recording",
+        ];
+        const SCHEDULE_TRIGGERS: &[&str] = &[
+            "schedul", "remind", "cron", "daily", "every morning", "alarm", "recurring",
+        ];
+        const MEMORY_TRIGGERS: &[&str] = &[
+            "session", "remember", "recall", "forgot", "earlier", "yesterday",
+            "last time", "memory",
+        ];
+        const MESSAGE_TRIGGERS: &[&str] = &[
+            "send a message", "message him", "message her", "message them",
+            "text him", "text her", "tell him", "tell her", "notify",
+        ];
+        const DELEGATE_TRIGGERS: &[&str] = &[
+            "delegate", "subagent", "sub-agent", "parallel", "multi-step",
+            "break this down", "research plan",
+        ];
+
+        fn category(name: &str) -> &'static str {
+            match name {
+                "web_search" | "web_fetch" => "core",
+                "browser_open" | "browser_snapshot" | "browser_click" | "browser_fill"
+                | "browser_screenshot" | "browser_get" | "browser_close" | "stealth_fetch"
+                | "x_fetch" => "browser",
+                "execute_code" | "execute_parallel" | "read_file" | "list_files"
+                | "edit_file" | "edit_file_llm" | "create_or_rewrite_file"
+                | "run_bash_command" | "run_sequential_cmds" | "run_parallel_cmds"
+                | "grep_search" => "code",
+                "analyze_image" | "analyze_video" | "read_document" | "transcribe_audio" => "media",
+                "create_scheduled_job" | "update_scheduled_job" | "delete_scheduled_job"
+                | "list_scheduled_jobs" => "schedule",
+                "list_sessions" | "search_sessions" => "memory",
+                "send_message" => "messaging",
+                "delegate_to_subagent" | "blackboard" | "orchestrate" => "delegate",
+                _ => "unknown",
+            }
+        }
+
+        let lower = message.to_lowercase();
+        let hit = |words: &[&str]| words.iter().any(|w| lower.contains(w));
+        let all = self.get_definitions();
+        let kept: Vec<ToolDefinition> = all
+            .into_iter()
+            .filter(|t| match category(&t.function.name) {
+                "core" | "unknown" => true,
+                "browser" if hit(BROWSER_TRIGGERS) => true,
+                "code" if hit(CODE_TRIGGERS) => true,
+                "media" if hit(MEDIA_TRIGGERS) => true,
+                "schedule" if hit(SCHEDULE_TRIGGERS) => true,
+                "memory" if hit(MEMORY_TRIGGERS) => true,
+                "messaging" if hit(MESSAGE_TRIGGERS) => true,
+                "delegate" if hit(DELEGATE_TRIGGERS) => true,
+                _ => false,
+            })
+            .collect();
+        tracing::info!(
+            kept = kept.len(),
+            categories = ?kept.iter().map(|t| category(&t.function.name)).collect::<std::collections::HashSet<_>>(),
+            "Pruned tool definitions for turn"
+        );
+        kept
+    }
+
     pub async fn execute_tool(&self, name: &str, mut args: serde_json::Value) -> ToolResult {
         let start = std::time::Instant::now();
 

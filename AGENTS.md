@@ -45,6 +45,8 @@ When found, prefer rebuilding the orphaned arms as real handler functions over d
 - Anthropic adapter pins prompt-cache breakpoints on the system block and the last tool (`cache_control: ephemeral`). System must stay in block form for the breakpoint; `adapter_tests.rs` asserts the shape. OpenAI-compatible endpoints cache identical prefixes automatically, nothing to do there.
 - `age_tool_results` (`agent/mod.rs`) digests stale `tool`-role messages in the loop's working set: keeps newest 3 full, replaces older with `[aged:name]` digests. Idempotent (skips already-aged). Unit-tested.
 - Per-tool output budgets: `Tool::output_budget()` defaults to 10_000; `WebSearchTool` 4_000, `WebFetchTool` 6_000. `ToolOrchestrator::output_budget(name)` resolves with default fallback. `AgentCore::execute_tool` truncates the message-facing string to `min(budget, tool_output_max_chars)`. Full outputs stay intact in `ToolResult` for structured-output collection.
+- Per-turn tool pruning: `get_definitions_filtered(message)` sends core (`web_search`, `web_fetch`) plus categories matched by keyword triggers (browser, code, media, schedule, memory, messaging, delegate). Unknown names always pass so MCP tools never vanish. `process()` computes once per turn and threads through `build_system_prompt` and `build_request`; `SubAgent` keeps the full set. This is the main lever on non-Anthropic providers, where prompt caching does not apply.
+- Session token attribution: `AgentCore` carries prompt/completion atomics; Telegram snapshots `usage_split()` around `process()` into `update_session`. `/usage` session counters depend on this; passing `None` leaves them zero forever.
 
 ## Agent loop conventions (`agent/mod.rs:process`)
 

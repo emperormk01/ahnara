@@ -1095,11 +1095,21 @@ async fn handle_message(bot: Bot, msg: Message, state: Arc<TelegramState>) -> Re
         }
     }
 
+    let (prompt_before, completion_before) = state.agent.usage_split();
     let response = state
         .agent
         .process(&agent_message, Some(&session_id))
         .await;
-    state.update_session(chat_id, None).await;
+    let (prompt_after, completion_after) = state.agent.usage_split();
+    state
+        .update_session(
+            chat_id,
+            Some((
+                prompt_after.saturating_sub(prompt_before) as u32,
+                completion_after.saturating_sub(completion_before) as u32,
+            )),
+        )
+        .await;
 
     // Send text response
     if let Err(err) = send_markdown_message(&bot, chat_id, &response).await {
