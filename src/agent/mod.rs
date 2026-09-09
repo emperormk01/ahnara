@@ -144,6 +144,28 @@ fn age_tool_results(messages: &mut Vec<Message>) {
     }
 }
 
+/// Detect model output that names a real tool whose schema was pruned from
+/// this turn. Returns the full definition so the loop can load it and retry.
+/// Matching is case-insensitive on the exact tool name.
+fn detect_unsent_tool_intent(
+    content: &str,
+    sent: &[crate::orchestrator::ToolDefinition],
+    all: &[crate::orchestrator::ToolDefinition],
+) -> Option<crate::orchestrator::ToolDefinition> {
+    let lower = content.to_lowercase();
+    all.iter().find_map(|t| {
+        let name = t.function.name.as_str();
+        if sent.iter().any(|s| s.function.name == name) {
+            return None;
+        }
+        if lower.contains(&name.to_lowercase()) {
+            Some(t.clone())
+        } else {
+            None
+        }
+    })
+}
+
 /// Detect model output that looks like a tool call written as plain text
 /// instead of a real function call (e.g. `{"name": "web_search", ...}`).
 /// Returns the claimed tool name when detected.
@@ -550,9 +572,16 @@ impl AgentCore {
 
         // Prune the tool catalog to this turn's needs once. Chat turns skip
         // the heavy categories entirely instead of rebilling them every call.
-        let filtered_tools = self.orchestrator.get_definitions_filtered(&effective_message);
+        // The full index still goes into the prompt so the model knows what
+        // exists; naming a pruned tool loads its schema mid-loop (see below).
+        let all_tools = self.orchestrator.get_definitions();
+        let mut filtered_tools = self
+            .orchestrator
+            .get_definitions_filtered(&effective_message);
 
-        let mut system_prompt = self.build_system_prompt(&session_key, &filtered_tools).await;
+        let mut system_prompt = self
+            .build_system_prompt(&session_key, &filtered_tools, &all_tools)
+            .await;
         tracing::debug!("=== SYSTEM PROMPT START (first 500 chars) ===");
         tracing::debug!("{}", &system_prompt[..system_prompt.len().min(500)]);
         tracing::debug!("=== SYSTEM PROMPT END ===");
@@ -579,9 +608,12 @@ impl AgentCore {
         let final_response: String;
         let mut tool_trace: Vec<ToolTraceEntry> = Vec::new();
         // Recoveries for model output that looks like a tool call written
-        // as plain text instead of a real function call.
+        // as plain text instead of a real function call, plus model output
+        // that names a pruned tool whose schema was not sent this turn.
         let mut tool_json_recoveries: u32 = 0;
         const MAX_TOOL_JSON_RECOVERIES: u32 = 2;
+        let mut tool_intent_recoveries: u32 = 0;
+        const MAX_TOOL_INTENT_RECOVERIES: u32 = 2;
 
         loop {
             iterations += 1;
@@ -697,7 +729,8 @@ impl AgentCore {
 
                     // No tool calls - this is the final response, unless the
                     // model wrote a tool call as plain text (a formatting
-                    // failure). Recover by telling it what went wrong and
+                    // failure) or named a tool whose schema was pruned from
+                    // this turn. Recover by telling it what went wrong and
                     // letting the loop try again, bounded so we cannot spin.
                     if let Some(tool_name) = detect_unexecuted_tool_call(&response.content) {
                         if tool_json_recoveries < MAX_TOOL_JSON_RECOVERIES {
@@ -721,6 +754,32 @@ impl AgentCore {
                             tool = %tool_name,
                             "Model kept writing tool calls as text; giving up recovery"
                         );
+                    }
+                    // The model named a real tool that was pruned from this
+                    // turn's schema. Load its full definition and continue so
+                    // the next request can carry out the call.
+                    if let Some(missing) = detect_unsent_tool_intent(
+                        &response.content,
+                        &filtered_tools,
+                        &all_tools,
+                    ) {
+                        if tool_intent_recoveries < MAX_TOOL_INTENT_RECOVERIES {
+                            tool_intent_recoveries += 1;
+                            tracing::warn!(
+                                session = %session_key,
+                                iteration = iterations,
+                                tool = %missing.function.name,
+                                attempt = tool_intent_recoveries,
+                                "Model named pruned tool; loading schema"
+                            );
+                            filtered_tools.push(missing);
+                            messages.push(Message::new("assistant", &response.content));
+                            messages.push(Message::new(
+                                "system",
+                                "System: the tool you named is now loaded with its full definition. Make a real function call to use it.",
+                            ));
+                            continue;
+                        }
                     }
                     final_response = response.content;
                     tracing::info!(
@@ -1081,7 +1140,12 @@ impl AgentCore {
         CapabilityManifest::new(&self.config, Some(&self.orchestrator))
     }
 
-    async fn build_system_prompt(&self, session_key: &str, tools: &[crate::orchestrator::ToolDefinition]) -> String {
+    async fn build_system_prompt(
+        &self,
+        session_key: &str,
+        tools: &[crate::orchestrator::ToolDefinition],
+        all_tools: &[crate::orchestrator::ToolDefinition],
+    ) -> String {
         use crate::persona::SystemPromptBuilder;
 
         let capability_summary = self.capability_manifest().prompt_summary();
@@ -1117,6 +1181,7 @@ impl AgentCore {
         });
         let base_prompt = SystemPromptBuilder::new(persona)
             .with_tools(&tools)
+            .with_tool_index(all_tools)
             .with_skills(&[])
             .build();
 
@@ -1668,5 +1733,44 @@ mod aging_tests {
         let once = msgs[0].content.clone().unwrap();
         age_tool_results(&mut msgs);
         assert_eq!(msgs[0].content.as_deref().unwrap(), once);
+    }
+}
+
+#[cfg(test)]
+mod intent_tests {
+    use super::detect_unsent_tool_intent;
+    use crate::orchestrator::{FunctionDef, ToolDefinition};
+
+    fn def(name: &str) -> ToolDefinition {
+        ToolDefinition {
+            tool_type: "function".into(),
+            function: FunctionDef {
+                name: name.into(),
+                description: "d".into(),
+                parameters: serde_json::json!({}),
+            },
+        }
+    }
+
+    #[test]
+    fn test_detects_unsent_tool() {
+        let sent = vec![def("web_search")];
+        let all = vec![def("web_search"), def("read_file")];
+        let hit = detect_unsent_tool_intent("i should use read_file for this", &sent, &all);
+        assert_eq!(hit.map(|t| t.function.name), Some("read_file".into()));
+    }
+
+    #[test]
+    fn test_ignores_sent_tools() {
+        let sent = vec![def("web_search")];
+        let all = vec![def("web_search")];
+        assert!(detect_unsent_tool_intent("let me web_search that", &sent, &all).is_none());
+    }
+
+    #[test]
+    fn test_ignores_unknown_names() {
+        let sent = vec![];
+        let all = vec![def("web_search")];
+        assert!(detect_unsent_tool_intent("just chatting here", &sent, &all).is_none());
     }
 }

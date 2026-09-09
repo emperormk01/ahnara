@@ -264,6 +264,7 @@ impl PersonaConfig {
 pub struct SystemPromptBuilder {
     persona: PersonaConfig,
     tools_description: String,
+    tools_index: String,
     skills_index: String,
 }
 
@@ -272,6 +273,7 @@ impl SystemPromptBuilder {
         Self {
             persona,
             tools_description: String::new(),
+            tools_index: String::new(),
             skills_index: String::new(),
         }
     }
@@ -284,6 +286,43 @@ impl SystemPromptBuilder {
         };
         self
     }
+
+    /// Compact one-line index of every known tool. Always included so the
+    /// model knows what exists; the agent loop injects the full schema when
+    /// the model names a tool that was pruned from this turn.
+    pub fn with_tool_index(mut self, tools: &[super::orchestrator::ToolDefinition]) -> Self {
+        if tools.is_empty() {
+            return self;
+        }
+        let mut index = String::from(
+            "## Full Tool Index\n\nEvery tool that exists, one line each. Only the tools under Available Tools carry full definitions this turn. If you need one listed here by its exact name, say the name and its full definition will be loaded.\n\n",
+        );
+        let mut names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
+        names.sort_unstable();
+        names.dedup();
+        for name in names {
+            let purpose = tools
+                .iter()
+                .find(|t| t.function.name == name)
+                .map(|t| short_purpose(&t.function.description))
+                .unwrap_or_default();
+            index.push_str(&format!("- {}: {}\n", name, purpose));
+        }
+        self.tools_index = index;
+        self
+    }
+
+/// One-line purpose for the compact tool index: first sentence of the
+/// description, capped so the index stays cheap.
+fn short_purpose(description: &str) -> String {
+    let first = description.split(['.', '\n']).next().unwrap_or("").trim();
+    let short: String = first.chars().take(100).collect();
+    if short.is_empty() {
+        "No description.".into()
+    } else {
+        short
+    }
+}
 
     fn build_tools_description(&self, tools: &[super::orchestrator::ToolDefinition]) -> String {
         let mut desc = String::from("## Available Tools\n\n");
@@ -482,6 +521,12 @@ impl SystemPromptBuilder {
         if !self.tools_description.is_empty() {
             prompt.push_str(&self.tools_description);
             prompt.push_str("\n\n");
+        }
+
+        // Full tool index (always injected, compact)
+        if !self.tools_index.is_empty() {
+            prompt.push_str(&self.tools_index);
+            prompt.push_str("\n");
         }
 
         // Skills (injected)
