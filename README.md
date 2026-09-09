@@ -4,7 +4,7 @@
 
 ![Rust](https://img.shields.io/badge/rust-1.95%2B-orange.svg)
 
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)
 
 ---
 
@@ -481,7 +481,7 @@ ahnara checks environment variables in order:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file.
+PolyForm Noncommercial 1.0.0 - see [LICENSE](LICENSE) file.
 
 ---
 

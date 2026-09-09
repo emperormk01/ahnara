@@ -4,7 +4,7 @@ version = "1.2.4"
 edition = "2021"
 authors = ["Auxlo.xyz <hello@auxlo.xyz>"]
 description = "Ultra-high-performance AI agent framework - beats Hermes and Nanobot"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
 repository = "https://github.com/emperormk01/Ahnara"
 
 [package.metadata.binstall]
