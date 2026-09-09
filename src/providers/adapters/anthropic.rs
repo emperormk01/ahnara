@@ -62,7 +62,7 @@ impl AnthropicAdapter {
                 }
             })
         } else {
-            serde_json::json!({"type": "text", "text": "[Image URL: {}]", url})
+            serde_json::json!({"type": "text", "text": format!("[Image URL: {}]", url)})
         }
     }
 
