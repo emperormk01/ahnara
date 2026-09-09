@@ -37,7 +37,7 @@ fn count_marker_occurrences(chars: &[char], marker: char) -> bool {
     count % 2 == 0
 }
 
-fn skip_special_region(chars: &[char], mut j: usize) -> usize {
+fn skip_special_region(chars: &[char], j: usize) -> usize {
     if j >= chars.len() {
         return j;
     }

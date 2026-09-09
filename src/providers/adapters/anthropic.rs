@@ -100,26 +100,6 @@ impl AnthropicAdapter {
         }
     }
 
-    async fn process_stream(stream: impl StreamExt<Item = Result<bytes::Bytes, reqwest::Error>>, tx: mpsc::Sender<StreamChunk>) {
-        let mut stream = stream;
-        while let Some(chunk) = stream.next().await {
-            if let Ok(bytes) = chunk {
-                let text = String::from_utf8_lossy(&bytes);
-                for line in text.lines() {
-                    if let Some(data) = line.strip_prefix("data: ") {
-                        if data == "[DONE]" {
-                            let _ = tx.send(StreamChunk { id: None, choices: vec![], done: true }).await;
-                            return;
-                        }
-                        if let Ok(event) = serde_json::from_str::<Value>(data) {
-                            Self::process_stream_event(&event, &tx).await;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     async fn process_stream_event(event: &Value, tx: &mpsc::Sender<StreamChunk>) {
         if let Some(event_type) = event.get("type").and_then(|t| t.as_str()) {
             match event_type {
@@ -319,7 +299,23 @@ impl ProviderAdapter for AnthropicAdapter {
                 tracing::error!("Anthropic stream HTTP {}", response.status());
                 return;
             }
-            Self::process_stream(response.bytes_stream(), tx).await;
+            let mut stream = response.bytes_stream();
+            while let Some(chunk) = stream.next().await {
+                if let Ok(bytes) = chunk {
+                    let text = String::from_utf8_lossy(&bytes);
+                    for line in text.lines() {
+                        if let Some(data) = line.strip_prefix("data: ") {
+                            if data == "[DONE]" {
+                                let _ = tx.send(StreamChunk { id: None, choices: vec![], done: true }).await;
+                                return;
+                            }
+                            if let Ok(event) = serde_json::from_str::<Value>(data) {
+                                Self::process_stream_event(&event, &tx).await;
+                            }
+                        }
+                    }
+                }
+            }
         });
 
         Ok(rx)

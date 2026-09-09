@@ -534,7 +534,7 @@ mod tests {
             ]
         }"#;
 
-        let result = parse_transcription_output(json).unwrap();
+        let result = parse_transcription_json(json).unwrap();
         assert_eq!(result.text, "Hello world, this is a test.");
         assert_eq!(result.language, "en");
         assert_eq!(result.segments.len(), 2);
@@ -544,7 +544,7 @@ mod tests {
     #[test]
     fn test_parse_error_json() {
         let json = r#"{"error": "File not found: /tmp/bad.mp3"}"#;
-        let result = parse_transcription_output(json);
+        let result = parse_transcription_json(json);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("File not found"));
     }

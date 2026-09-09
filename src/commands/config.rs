@@ -12,10 +12,6 @@ pub fn handle_config(action: crate::cli::ConfigCommands) -> Result<()> {
         crate::cli::ConfigCommands::Show { format } => handle_show_config(&config_path, &format),
         crate::cli::ConfigCommands::Get { key } => handle_get_config(&config_path, &key),
         crate::cli::ConfigCommands::Set { key, value } => handle_set_config(&config_path, &key, &value),
-        crate::cli::ConfigCommands::Path => {
-            println!("{}", config_path.display());
-            Ok(())
-        }
         crate::cli::ConfigCommands::Edit => handle_edit_config(&config_path),
         crate::cli::ConfigCommands::Reset { yes } => handle_reset_config(&config_path, yes),
         crate::cli::ConfigCommands::Validate => handle_validate_config(&config_path),

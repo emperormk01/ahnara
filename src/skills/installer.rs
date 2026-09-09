@@ -34,6 +34,14 @@ impl SkillInstaller {
         self.install_from_registry(&skill).await
     }
 
+    /// Update a skill by reinstalling it from the registry
+    pub async fn update(&mut self, name: &str) -> Result<String> {
+        if self.is_installed(name) {
+            self.uninstall(name)?;
+        }
+        self.install(name).await
+    }
+
     /// Install from GitHub URL
     pub async fn install_from_url(&self, url: &str) -> Result<String> {
         self.registry.install_from_github(url, &self.skills_dir).await

@@ -88,25 +88,6 @@ impl LocalEnvironment {
         }
         std::env::temp_dir()
     }
-}
-
-#[async_trait]
-impl Environment for LocalEnvironment {
-    async fn run_bash(
-        &self,
-        script: &str,
-        login: bool,
-        timeout: Duration,
-        stdin_data: Option<&str>,
-    ) -> Result<(String, i32)> {
-        let safe_cwd = Self::resolve_safe_cwd(&self.cwd);
-        let mut cmd = self.build_command(script, login, &safe_cwd, stdin_data);
-        self.apply_environment(&mut cmd);
-
-        let child = cmd.spawn().context("Failed to spawn bash process")?;
-        let output = tokio::time::timeout(timeout, self.run_child(child, stdin_data)).await;
-        self.handle_output(output)
-    }
 
     fn build_command(&self, script: &str, login: bool, safe_cwd: &std::path::Path, stdin_data: Option<&str>) -> Command {
         let mut cmd = Command::new("bash");
@@ -139,7 +120,7 @@ impl Environment for LocalEnvironment {
         }
     }
 
-    async fn run_child(&self, mut child: std::process::Child, stdin_data: Option<&str>) -> Result<std::process::Output> {
+    async fn run_child(&self, mut child: tokio::process::Child, stdin_data: Option<&str>) -> Result<std::process::Output> {
         if let Some(data) = stdin_data {
             if let Some(ref mut stdin) = child.stdin {
                 use tokio::io::AsyncWriteExt;
@@ -150,7 +131,7 @@ impl Environment for LocalEnvironment {
         child.wait_with_output().await.map_err(|e| anyhow::anyhow!("Process error: {}", e))
     }
 
-    fn handle_output(&self, output: Result<Result<std::process::Output, std::io::Error>, tokio::time::error::Elapsed>) -> Result<(String, i32)> {
+    fn handle_output(&self, output: Result<Result<std::process::Output, std::io::Error>, tokio::time::error::Elapsed>, timeout: Duration) -> Result<(String, i32)> {
         match output {
             Ok(Ok(output)) => {
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -171,6 +152,25 @@ impl Environment for LocalEnvironment {
                 timeout.as_secs()
             )),
         }
+    }
+}
+
+#[async_trait]
+impl Environment for LocalEnvironment {
+    async fn run_bash(
+        &self,
+        script: &str,
+        login: bool,
+        timeout: Duration,
+        stdin_data: Option<&str>,
+    ) -> Result<(String, i32)> {
+        let safe_cwd = Self::resolve_safe_cwd(&self.cwd);
+        let mut cmd = self.build_command(script, login, &safe_cwd, stdin_data);
+        self.apply_environment(&mut cmd);
+
+        let child = cmd.spawn().context("Failed to spawn bash process")?;
+        let output = tokio::time::timeout(timeout, self.run_child(child, stdin_data)).await;
+        self.handle_output(output, timeout)
     }
 
     async fn cleanup(&self) -> Result<()> {

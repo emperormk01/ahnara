@@ -1145,7 +1145,7 @@ fn parse_history_message(row: &rusqlite::Row) -> rusqlite::Result<HistoryMessage
 fn parse_reflection(
     row: &rusqlite::Row,
 ) -> rusqlite::Result<super::reflector::Reflection> {
-    use super::reflector::{Reflection, ReflectionType};
+    use super::reflector::Reflection;
 
     let type_str: String = row.get(1)?;
     let reflection_type = parse_reflection_type(&type_str);

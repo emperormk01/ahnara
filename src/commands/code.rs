@@ -44,7 +44,7 @@ pub fn ensure_workspace(session_id: &str) -> Result<PathBuf> {
 /// Build the specialized coding agent system prompt.
 ///
 /// This replaces the normal persona prompt when /code mode is active.
-pub fn build_code_system_prompt(workspace: &PathBuf) -> String {
+pub fn build_code_system_prompt(workspace: &std::path::Path) -> String {
     let workspace_str = workspace.display();
     format!(
         r#"You are a specialized coding agent operating within a real-time, full-stack development environment.
@@ -182,13 +182,13 @@ When a user asks about adding API keys, tokens, or credentials:
 }
 
 /// Scan the workspace and return a file tree summary for context injection.
-pub fn scan_workspace(workspace: &PathBuf) -> Result<String> {
+pub fn scan_workspace(workspace: &std::path::Path) -> Result<String> {
     let mut tree = String::new();
-    scan_dir(workspace, workspace, &mut tree, 0)?;
+    scan_dir(workspace, &mut tree, 0)?;
     Ok(tree)
 }
 
-fn scan_dir(root: &PathBuf, dir: &PathBuf, tree: &mut String, depth: usize) -> Result<()> {
+fn scan_dir(dir: &std::path::Path, tree: &mut String, depth: usize) -> Result<()> {
     let indent = "  ".repeat(depth);
     let entries: Vec<_> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok())
@@ -203,7 +203,7 @@ fn scan_dir(root: &PathBuf, dir: &PathBuf, tree: &mut String, depth: usize) -> R
         let path = entry.path();
         if path.is_dir() {
             tree.push_str(&format!("{}/\n", name));
-            scan_dir(root, &path, tree, depth + 1)?;
+            scan_dir(&path, tree, depth + 1)?;
         } else {
             tree.push_str(&format!("{}\n", name));
         }

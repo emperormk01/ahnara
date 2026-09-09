@@ -21,7 +21,6 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -35,7 +34,7 @@ pub use environment::{
 pub use local_env::LocalEnvironment;
 pub use docker_env::DockerEnvironment;
 pub use ssh_env::SshEnvironment;
-pub use sandbox::{Sandbox, SandboxConfig, Limits};
+pub use sandbox::SandboxConfig;
 
 /// Result from code execution
 #[derive(Debug, Clone, Serialize, Deserialize)]

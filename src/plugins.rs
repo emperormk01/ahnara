@@ -177,7 +177,7 @@ impl PluginManager {
         &self,
         event: HookEvent,
         mut current: String,
-        outputs: Vec<HookOutput>,
+        outputs: Vec<PluginHookOutput>,
     ) -> String {
         for output in outputs {
             if let Some(error) = output.error {

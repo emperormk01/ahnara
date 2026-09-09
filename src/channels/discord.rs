@@ -10,7 +10,7 @@ use tracing::{error, info};
 pub struct DiscordHandler {
     agent: Arc<crate::agent::AgentCore>,
     model_store: Arc<crate::memory::model_store::ModelStore>,
-    code_mode: Arc<crate::memory::CodeModeStore>,
+    _code_mode: Arc<crate::memory::CodeModeStore>,
     adapter: Option<Arc<crate::tools::DiscordAdapter>>,
     allowed_guilds: Vec<u64>,
 }
@@ -26,7 +26,7 @@ impl DiscordHandler {
         Self {
             agent,
             model_store,
-            code_mode,
+            _code_mode: code_mode,
             adapter,
             allowed_guilds,
         }
@@ -80,7 +80,6 @@ impl EventHandler for DiscordHandler {
             let http = ctx.http;
 
             let content_clone = content.clone();
-            let code_mode = self.code_mode.clone();
             tokio::spawn(async move {
                 // Check for /model command
                 if content_clone.trim().starts_with("/model") {

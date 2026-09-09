@@ -127,7 +127,7 @@ pub struct TelegramState {
     agent: Arc<AgentCore>,
     model_store: Arc<crate::memory::model_store::ModelStore>,
     sessions: RwLock<HashMap<i64, SessionState>>,
-    code_mode: Arc<crate::memory::CodeModeStore>,
+    _code_mode: Arc<crate::memory::CodeModeStore>,
     config: TelegramConfig,
     /// Per-user flow state for multi-step model setup (ephemeral, lost on restart)
     pending_model_flows: RwLock<HashMap<i64, ModelFlowState>>,
@@ -150,7 +150,7 @@ impl TelegramState {
             agent,
             model_store,
             sessions: RwLock::new(HashMap::new()),
-            code_mode,
+            _code_mode: code_mode,
             config,
             pending_model_flows: RwLock::new(HashMap::new()),
             message_adapter,
@@ -385,7 +385,7 @@ async fn handle_command(
             return handle_logs_cmd(&bot, chat_id, &args).await;
         }
         Command::Schedule(args) => {
-            return handle_schedule_cmd(&state, chat_id, &args).await;
+            return handle_schedule_cmd(&bot, &state, chat_id, &args).await;
         }
         Command::Normal => handle_normal_cmd(&state, chat_id).await,
         Command::New => handle_new_cmd(&state, chat_id).await,
@@ -544,7 +544,7 @@ async fn handle_mcp_cmd(
 
 async fn handle_token_cmd(
     bot: &Bot,
-    state: &TelegramState,
+    _state: &TelegramState,
     chat_id: i64,
     msg: &Message,
     args: &str,
@@ -566,7 +566,7 @@ async fn handle_logs_cmd(bot: &Bot, chat_id: i64, args: &str) -> ResponseResult<
     Ok(())
 }
 
-async fn handle_schedule_cmd(state: &TelegramState, chat_id: i64, args: &str) -> ResponseResult<()> {
+async fn handle_schedule_cmd(bot: &Bot, state: &TelegramState, chat_id: i64, args: &str) -> ResponseResult<()> {
     let config_path = dirs::home_dir()
         .map(|h| h.join(".ahnara/config.toml"))
         .unwrap_or_else(|| std::path::PathBuf::from("~/.ahnara/config.toml"));
@@ -575,14 +575,14 @@ async fn handle_schedule_cmd(state: &TelegramState, chat_id: i64, args: &str) ->
         config_path.to_string_lossy().to_string(),
     );
     let response = crate::commands::schedule::handle_schedule(args, &scheduler_manager).await;
-    send_markdown_message(&TelegramState::get_bot(), chat_id, &response).await?;
+    send_markdown_message(bot, chat_id, &response).await?;
     Ok(())
 }
 
-fn handle_normal_cmd(state: &TelegramState, chat_id: i64) -> String {
+async fn handle_normal_cmd(state: &TelegramState, chat_id: i64) -> String {
     let user_id = format!("{}", chat_id);
     let code_session = state.agent.get_or_create_session_id("telegram-code", &user_id);
-    state.agent.clear_system_prompt_override(&code_session);
+    state.agent.clear_system_prompt_override(&code_session).await;
     state.agent.reset_session_routing("telegram-code", &user_id);
     "Exited coding mode. Back to normal.".to_string()
 }
@@ -1185,8 +1185,6 @@ async fn send_structured_output(
     chat_id: i64,
     output: &crate::agent::StructuredOutput,
 ) -> anyhow::Result<()> {
-    use teloxide::types::InputFile;
-
     match output.format.as_str() {
         "image" => send_image(bot, chat_id, output).await,
         "video" => send_video(bot, chat_id, output).await,
