@@ -269,10 +269,10 @@ impl Compactor {
 
     /// Call Auxlo gateway for summarization
     async fn call_gemma(&self, prompt: &str) -> Result<String> {
-        let url = "https://gateway.auxlo.xyz/v1/chat/completions";
-        
+        let url = crate::providers::gateway_endpoint();
+
         let body = serde_json::json!({
-            "model": "gemini-3.1-flash-lite",
+            "model": crate::providers::gateway_model(),
             "messages": [
                 {
                     "role": "system",

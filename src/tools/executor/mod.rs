@@ -93,68 +93,44 @@ impl ExecuteCodeTool {
         Self { config }
     }
 
-    fn validate(&self, code: &str, lang: &str) -> Result<()> {
-        // Check blocked patterns
-        let blocked_patterns = [
-            "rm -rf /",
-            ":(){ :|:& };:",
-            "mkfs",
-            "dd if=",
-            "/etc/passwd",
-            "/etc/shadow",
-        ];
-        for pattern in &blocked_patterns {
-            if code.contains(pattern) {
-                return Err(anyhow!("Blocked pattern detected: {}", pattern));
+    fn sandbox(&self) -> SandboxConfig {
+        // Single source of truth for execution guardrails lives in
+        // `sandbox::SandboxConfig`; merge the tool's workspace limits into it
+        // plus the extra fork-bomb spelling and JS modules this tool blocks.
+        let mut sb = SandboxConfig {
+            max_output_chars: self.config.max_output_chars,
+            workspace_root: Some(self.config.workspace_root.clone()),
+            ..SandboxConfig::default()
+        };
+        for extra in [":(){ :|:& };:"] {
+            if !sb.blocked_patterns.iter().any(|p| p == extra) {
+                sb.blocked_patterns.push(extra.into());
             }
         }
+        for extra in ["http", "tls", "crypto"] {
+            if !sb.blocked_modules.iter().any(|m| m == extra) {
+                sb.blocked_modules.push(extra.into());
+            }
+        }
+        sb
+    }
+
+    fn validate(&self, code: &str, lang: &str) -> Result<()> {
+        let sb = self.sandbox();
+        sb.validate_command(code).map_err(|e| anyhow!(e))?;
 
         // Language-specific import validation
         match lang {
-            "python" => self.validate_python(code)?,
-            "typescript" | "javascript" => self.validate_js(code)?,
+            "python" => sb.validate_python(code).map_err(|e| anyhow!(e))?,
+            "typescript" | "javascript" => sb.validate_js(code).map_err(|e| anyhow!(e))?,
             _ => {}
         }
 
         Ok(())
     }
 
-    fn validate_python(&self, code: &str) -> Result<()> {
-        let blocked = ["os", "sys", "subprocess", "socket", "requests", "urllib", "http.client"];
-        for imp in &blocked {
-            if code.contains(&format!("import {}", imp))
-                || code.contains(&format!("from {} import", imp))
-            {
-                return Err(anyhow!("Blocked Python import: {}", imp));
-            }
-        }
-        Ok(())
-    }
-
-    fn validate_js(&self, code: &str) -> Result<()> {
-        let blocked = ["child_process", "fs", "net", "http", "tls", "crypto"];
-        for module in blocked {
-            if code.contains(&format!("require('{}')", module))
-                || code.contains(&format!("from '{}'", module))
-                || code.contains(&format!("import from '{}'", module))
-            {
-                return Err(anyhow!("Blocked JS module: {}", module));
-            }
-        }
-        Ok(())
-    }
-
     fn truncate_output(&self, output: &str) -> (String, bool) {
-        if output.len() > self.config.max_output_chars {
-            let truncated = format!(
-                "{}... [truncated {} chars]",
-                &output[..self.config.max_output_chars],
-                output.len() - self.config.max_output_chars
-            );
-            (truncated, true)
-        } else {
-            (output.to_string(), false)
-        }
+        self.sandbox().truncate_output(output)
     }
 
     async fn execute_internal(

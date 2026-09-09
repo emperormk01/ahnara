@@ -16,7 +16,7 @@ use teloxide::{
 
 use crate::agent::AgentCore;
 use crate::channels::markdown::markdown_to_telegram;
-use crate::config::TelegramConfig;
+use crate::config::{GroupPolicy, TelegramConfig};
 use crate::persona::shared::{
     load_current_persona, reset_persona, set_behavior, set_length, set_name, set_no_em_dashes,
     set_no_emojis, set_tone, toggle_no_em_dashes, toggle_no_emojis,
@@ -220,6 +220,14 @@ pub async fn start(
 
     let bot = Bot::new(config.token.clone());
 
+    if let Some(ref url) = config.webhook_url {
+        if !url.trim().is_empty() {
+            tracing::warn!(
+                "Telegram webhook_url is set but webhook mode is not implemented; using long polling. Clear webhook_url to silence this."
+            );
+        }
+    }
+
     // Verify that the bot token is valid and the bot is reachable
     match tokio::time::timeout(
         std::time::Duration::from_secs(10),
@@ -345,6 +353,10 @@ async fn handle_command(
     cmd: Command,
     state: Arc<TelegramState>,
 ) -> ResponseResult<()> {
+    if !message_allowed(&state, &msg) {
+        return Ok(());
+    }
+
     let chat_id: i64 = msg.chat.id.0;
     let _typing_guard = spawn_typing_loop(&bot, chat_id);
 
@@ -797,7 +809,36 @@ async fn handle_waiting_for_key(
     Ok(())
 }
 
+/// Shared inbound gate for group policy and the sender whitelist.
+/// Group chats have negative IDs; private chats are positive.
+fn message_allowed(state: &TelegramState, msg: &Message) -> bool {
+    let chat_id: i64 = msg.chat.id.0;
+    if chat_id < 0 {
+        match state.config.group_policy {
+            GroupPolicy::Closed => return false,
+            GroupPolicy::Open => {}
+            GroupPolicy::Mention => {
+                let text = msg.text().unwrap_or("");
+                if !(text.contains('@') || msg.reply_to_message().is_some()) {
+                    return false;
+                }
+            }
+        }
+    }
+    if !state.config.allowed_users.is_empty() {
+        let sender = msg.from().map(|u| u.id.0.to_string()).unwrap_or_default();
+        if !state.config.allowed_users.iter().any(|u| u == &sender) {
+            return false;
+        }
+    }
+    true
+}
+
 async fn handle_message(bot: Bot, msg: Message, state: Arc<TelegramState>) -> ResponseResult<()> {
+    if !message_allowed(&state, &msg) {
+        return Ok(());
+    }
+
     let chat_id: i64 = msg.chat.id.0;
 
     // Track active chat for mid-task message delivery

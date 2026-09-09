@@ -337,13 +337,13 @@ impl SkillExtractor {
 
     async fn call_llm(&self, prompt: &str) -> Result<String> {
         let body = serde_json::json!({
-            "model": "gemini-3.1-flash-lite",
+            "model": crate::providers::gateway_model(),
             "messages": [{ "role": "user", "content": prompt }],
             "max_tokens": 1500
         });
         let client = reqwest::Client::new();
         let resp = client
-            .post("https://gateway.auxlo.xyz/v1/chat/completions")
+            .post(crate::providers::gateway_endpoint())
             .header("Content-Type", "application/json")
             .json(&body)
             .timeout(std::time::Duration::from_secs(90))

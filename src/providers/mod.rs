@@ -34,6 +34,24 @@ fn adapters() -> &'static AdapterRegistry {
     ADAPTERS.get_or_init(|| AdapterRegistry::new())
 }
 
+/// Shared fallback gateway used by background tasks (summarization,
+/// reflection, skill extraction, vision) that predate provider routing.
+/// Override via `AHNARA_GATEWAY_URL` / `AHNARA_GATEWAY_MODEL`.
+pub fn gateway_endpoint() -> String {
+    std::env::var("AHNARA_GATEWAY_URL")
+        .ok()
+        .filter(|u| !u.trim().is_empty())
+        .unwrap_or_else(|| "https://gateway.auxlo.xyz/v1/chat/completions".into())
+}
+
+/// Default model for gateway fallback calls.
+pub fn gateway_model() -> String {
+    std::env::var("AHNARA_GATEWAY_MODEL")
+        .ok()
+        .filter(|m| !m.trim().is_empty())
+        .unwrap_or_else(|| "gemini-3.1-flash-lite".into())
+}
+
 /// LLM Provider trait - unified interface for all providers
 #[async_trait]
 pub trait LLMProvider: Send + Sync {
@@ -55,6 +73,7 @@ impl ProviderPool {
     pub fn new(config: ProvidersConfig) -> Self {
         let client = Client::builder()
             .timeout(Duration::from_secs(config.request_timeout_secs))
+            .pool_max_idle_per_host(config.connection_pool_size)
             .build()
             .unwrap_or_else(|_| Client::new());
 

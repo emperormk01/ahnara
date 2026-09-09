@@ -36,7 +36,6 @@ pub struct MemoryEntry {
 /// Simplified memory engine (hot cache only for now)
 pub struct MemoryEngine {
     hot: RwLock<LruCache<String, MemoryEntry>>,
-    #[allow(dead_code)]
     db_path: PathBuf,
 }
 
@@ -93,6 +92,12 @@ impl MemoryEngine {
     pub fn hot_keys(&self) -> Vec<String> {
         let hot = self.hot.read().unwrap();
         hot.iter().map(|(k, _)| k.clone()).collect()
+    }
+
+    /// Filesystem path backing this engine's data directory.
+    /// Sibling stores (sessions, models) share the same configured path.
+    pub fn db_path(&self) -> &std::path::Path {
+        &self.db_path
     }
 
     pub fn clear_hot(&self) {

@@ -490,6 +490,15 @@ timezone = "UTC"
 connection_pool_size = 32
 request_timeout_secs = 120
 
+[sub_agents]
+enabled = true
+min_complexity = 50
+max_budget = 30000
+max_concurrent = 5
+timeout_secs = 60
+fallback_on_error = true
+track_cost = true
+
 {}[memory]
 database_path = "~/.ahnara/memory.db"
 hot_cache_size = 1000

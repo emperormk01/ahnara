@@ -12,6 +12,7 @@ pub struct DiscordHandler {
     model_store: Arc<crate::memory::model_store::ModelStore>,
     code_mode: Arc<crate::memory::CodeModeStore>,
     adapter: Option<Arc<crate::tools::DiscordAdapter>>,
+    allowed_guilds: Vec<u64>,
 }
 
 impl DiscordHandler {
@@ -20,12 +21,14 @@ impl DiscordHandler {
         model_store: Arc<crate::memory::model_store::ModelStore>,
         code_mode: Arc<crate::memory::CodeModeStore>,
         adapter: Option<Arc<crate::tools::DiscordAdapter>>,
+        allowed_guilds: Vec<u64>,
     ) -> Self {
         Self {
             agent,
             model_store,
             code_mode,
             adapter,
+            allowed_guilds,
         }
     }
 }
@@ -40,6 +43,14 @@ impl EventHandler for DiscordHandler {
         // Ignore messages from the bot itself
         if msg.author.bot {
             return;
+        }
+
+        // Guild allowlist: when configured, ignore servers not on the list.
+        // DMs (no guild) are always allowed.
+        if let Some(guild_id) = msg.guild_id {
+            if !self.allowed_guilds.is_empty() && !self.allowed_guilds.contains(&guild_id.get()) {
+                return;
+            }
         }
 
         let bot_user = ctx.cache.current_user();
@@ -251,7 +262,13 @@ pub async fn start(
                 | GatewayIntents::GUILD_MEMBERS;
 
             let mut client = Client::builder(&config.token, intents)
-                .event_handler(DiscordHandler::new(agent, model_store, code_mode, adapter))
+                .event_handler(DiscordHandler::new(
+                    agent,
+                    model_store,
+                    code_mode,
+                    adapter,
+                    config.allowed_guilds.clone(),
+                ))
                 .await
                 .map_err(|e| anyhow::anyhow!("Discord client builder error: {}", e))?;
 

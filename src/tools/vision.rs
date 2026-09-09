@@ -4,18 +4,15 @@
 //! `read_document` (extracts text from PDFs).
 
 use crate::orchestrator::{Tool, ToolResult};
-use crate::providers::{ContentPart, ImageUrlPayload, Message};
+use crate::providers::{gateway_endpoint, gateway_model, ContentPart, ImageUrlPayload, Message};
 use base64::Engine;
 use serde_json::json;
 use std::path::Path;
 
-const VISION_ENDPOINT: &str = "https://gateway.auxlo.xyz/v1/chat/completions";
-const VISION_MODEL: &str = "gemini-3.1-flash-lite";
-
 async fn call_vision_api(messages: serde_json::Value) -> anyhow::Result<String> {
     let client = reqwest::Client::new();
     let resp = client
-        .post(VISION_ENDPOINT)
+        .post(gateway_endpoint())
         .header("Content-Type", "application/json")
         .json(&messages)
         .send()
@@ -196,7 +193,7 @@ impl Tool for AnalyzeImageTool {
         let data_url = format!("data:{};base64,{}", mime, b64);
 
         let request = json!({
-            "model": VISION_MODEL,
+            "model": gateway_model(),
             "messages": [{
                 "role": "user",
                 "content": [
@@ -355,7 +352,7 @@ impl Tool for AnalyzeVideoTool {
         }
 
         let request = json!({
-            "model": VISION_MODEL,
+            "model": gateway_model(),
             "messages": [{"role": "user", "content": content_parts}],
             "max_tokens": 4096
         });

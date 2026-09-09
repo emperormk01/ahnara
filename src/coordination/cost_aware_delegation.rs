@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::SubAgentsConfig;
+
 /// Token budget configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenBudget {
@@ -39,6 +41,19 @@ impl TokenBudget {
             max_tokens_per_request: max_tokens,
             max_sub_agent_tokens_per_session: session_budget,
             ..Default::default()
+        }
+    }
+
+    /// Build a budget from the `[sub_agents]` config section so file
+    /// settings actually drive delegation instead of hardcoded defaults.
+    pub fn from_sub_agents(config: &SubAgentsConfig, max_tokens_per_request: u32) -> Self {
+        Self {
+            max_tokens_per_request,
+            max_sub_agent_tokens_per_session: config.max_budget,
+            tokens_used: 0,
+            sub_agents_enabled: config.enabled,
+            min_complexity_for_delegation: config.min_complexity,
+            sub_agent_cost_factor: 1.5,
         }
     }
 

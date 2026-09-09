@@ -330,7 +330,7 @@ impl Reflector {
     /// Call the native AI gateway for reflection
     async fn call_gateway(&self, prompt: &str) -> Result<String> {
         let body = serde_json::json!({
-            "model": "gemini-3.1-flash-lite",
+            "model": crate::providers::gateway_model(),
             "messages": [
                 {
                     "role": "user",
@@ -342,7 +342,7 @@ impl Reflector {
 
         let client = reqwest::Client::new();
         let response = client
-            .post("https://gateway.auxlo.xyz/v1/chat/completions")
+            .post(crate::providers::gateway_endpoint())
             .header("Content-Type", "application/json")
             .json(&body)
             .timeout(std::time::Duration::from_secs(30))
