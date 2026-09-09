@@ -51,7 +51,7 @@ fn persist_state_file(log: &ScheduleRunLog) {
 /// Pre-populate a run log from config so entries exist before the first run fires.
 pub fn create_run_log(jobs: &[ScheduleJobConfig]) -> ScheduleRunLog {
     let mut persisted = load_state_file();
-    let now = now_epoch();
+    let _now = now_epoch();
     let mut map = HashMap::new();
 
     for job in jobs {

@@ -417,7 +417,7 @@ pub fn restrict_permissions(path: &std::path::Path) -> std::io::Result<()> {
 /// string and it doesn't pretend the key is set.
 fn sanitize_api_key(
     key: &str,
-    env_var: &str,
+    _env_var: &str,
 ) -> String {
     const PLACEHOLDER: &str = "<set via ahnara token or AHNARA_API_KEY env>";
     if key.trim().is_empty() {
@@ -683,7 +683,7 @@ mod tests {
     fn non_interactive_setup_writes_config() {
         let tmp = env::temp_dir().join(format!("ahnara-setup-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
-        let config_path = tmp.join("config.toml");
+        let _config_path = tmp.join("config.toml");
         let opts = make_opts();
 
         non_interactive_setup(&tmp, &config_path, &opts).expect("setup should succeed");

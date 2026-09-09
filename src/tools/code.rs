@@ -27,7 +27,7 @@ impl Tool for ReadFileTool {
     }
     async fn execute(&self, args: serde_json::Value) -> Result<ToolResult> {
         let path = args["path"].as_str().ok_or_else(|| anyhow!("Missing path"))?;
-        let content = tokio::fs::read_to_string(path).await
+        let _content = tokio::fs::read_to_string(path).await
             .map_err(|e| anyhow!("Failed to read {}: {}", path, e))?;
 
         let output = if let (Some(start), Some(end)) = (args["start_line"].as_i64(), args["end_line"].as_i64()) {

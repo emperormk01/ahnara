@@ -76,7 +76,7 @@ impl TokenBudget {
     /// Check if delegation is worth it cost-wise
     pub fn is_delegation_worthwhile(
         &self,
-        estimated_main_cost: u32,
+        _estimated_main_cost: u32,
         estimated_sub_cost: u32,
         complexity: u32,
     ) -> bool {
@@ -97,7 +97,7 @@ impl TokenBudget {
 
         // Cost-benefit analysis:
         // Delegate if: sub-agent benefit > (sub_cost * factor) AND complexity justifies overhead
-        let adjusted_sub_cost = (estimated_sub_cost as f32 * self.sub_agent_cost_factor) as u32;
+        let _adjusted_sub_cost = (estimated_sub_cost as f32 * self.sub_agent_cost_factor) as u32;
 
         // Only delegate if:
         // 1. Task is complex enough

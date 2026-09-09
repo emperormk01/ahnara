@@ -499,7 +499,7 @@ impl AgentCore {
         let max_iterations = self.config.agent.max_tool_iterations as usize;
         let nudge_threshold = self.config.agent.nudge_after_tool_calls;
         let mut total_tool_calls: u32 = 0;
-        let mut final_response: String;
+        let final_response: String;
         let mut tool_trace: Vec<ToolTraceEntry> = Vec::new();
 
         loop {

@@ -204,7 +204,7 @@ impl Environment for DockerEnvironment {
             anyhow::bail!("Docker container not started. Call start() first.");
         }
 
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         let mut cmd = Command::new(&self.docker_exe);
         cmd.args(["exec", "-i"])

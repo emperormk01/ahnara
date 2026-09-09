@@ -189,7 +189,7 @@ pub fn scan_workspace(workspace: &std::path::Path) -> Result<String> {
 }
 
 fn scan_dir(dir: &std::path::Path, tree: &mut String, depth: usize) -> Result<()> {
-    let indent = "  ".repeat(depth);
+
     let entries: Vec<_> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok())
         .filter(|e| {

@@ -64,7 +64,7 @@ impl Environment for SshEnvironment {
         script: &str,
         login: bool,
         timeout: Duration,
-        stdin_data: Option<&str>,
+        _stdin_data: Option<&str>,
     ) -> Result<(String, i32)> {
         let mut cmd = self.ssh_cmd();
 
@@ -80,7 +80,7 @@ impl Environment for SshEnvironment {
             .stderr(Stdio::piped())
             .stdin(Stdio::null());
 
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         let output = tokio::time::timeout(timeout, cmd.output())
             .await

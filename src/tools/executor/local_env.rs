@@ -131,7 +131,7 @@ impl LocalEnvironment {
         child.wait_with_output().await.map_err(|e| anyhow::anyhow!("Process error: {}", e))
     }
 
-    fn handle_output(&self, output: Result<Result<std::process::Output, std::io::Error>, tokio::time::error::Elapsed>, timeout: Duration) -> Result<(String, i32)> {
+    fn handle_output(&self, output: Result<Result<std::process::Output, anyhow::Error>, tokio::time::error::Elapsed>, timeout: Duration) -> Result<(String, i32)> {
         match output {
             Ok(Ok(output)) => {
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();

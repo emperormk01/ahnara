@@ -638,7 +638,7 @@ impl Tool for WebFetchTool {
         
         let start = std::time::Instant::now();
         
-        let (ok, _) = run_agent_browser(&["open", url])?;
+        let (_ok, _) = run_agent_browser(&["open", url])?;
         if !ok {
             let duration_ms = start.elapsed().as_millis() as u64;
             return Ok(ToolResult {

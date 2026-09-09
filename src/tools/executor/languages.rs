@@ -72,7 +72,7 @@ impl LanguageExecutor for PythonExec {
         &self,
         code: &str,
         cwd: &PathBuf,
-        timeout: Duration,
+        _timeout: Duration,
     ) -> Result<ScriptResult> {
         self.validate_imports(code)?;
         
@@ -140,7 +140,7 @@ impl LanguageExecutor for BunExec {
         &self,
         code: &str,
         cwd: &PathBuf,
-        timeout: Duration,
+        _timeout: Duration,
     ) -> Result<ScriptResult> {
         self.validate_modules(code)?;
         
@@ -188,7 +188,7 @@ impl LanguageExecutor for ShellExec {
         &self,
         code: &str,
         cwd: &PathBuf,
-        timeout: Duration,
+        _timeout: Duration,
     ) -> Result<ScriptResult> {
         let start = std::time::Instant::now();
         let output = Command::new("sh")

@@ -82,7 +82,7 @@ impl AgentError {
     /// Convert to user-friendly message
     pub fn user_message(&self) -> String {
         match self {
-            Self::ProviderError { provider, message, .. } => {
+            Self::ProviderError { provider, message: _, .. } => {
                 format!("Connection issue with {}. Retrying...", provider)
             }
             Self::ToolError { tool, .. } => {

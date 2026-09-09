@@ -149,7 +149,7 @@ impl SubAgent {
     async fn execute_inner(&self) -> Result<SubAgentResult> {
         let mut tools_used = Vec::new();
         let mut iterations = 0;
-        let mut response = String::new();
+        let response: String;
 
         // Build system prompt with sub-agent context
         let system_prompt = SystemPromptBuilder::new(self.persona.clone())

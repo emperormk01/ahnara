@@ -185,7 +185,7 @@ impl LearningLoop {
         Ok(improved)
     }
 
-    async fn suggest_improvement(&self, skill_name: &str, failures: &[&str]) -> Result<String> {
+    async fn suggest_improvement(&self, _skill_name: &str, failures: &[&str]) -> Result<String> {
         // In production, use LLM to analyze failures and suggest improvements
         Ok(format!(
             "Based on {} failures, consider adding:\n- Better error handling\n- More specific instructions\n- Edge case coverage",

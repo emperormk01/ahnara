@@ -18,7 +18,7 @@ pub use super::environment::ProcessOutput;
 pub async fn run_with_timeout(
     cmd: &str,
     cwd: &std::path::Path,
-    timeout: Duration,
+    _timeout: Duration,
 ) -> Result<ProcessOutput> {
     let start = std::time::Instant::now();
 
