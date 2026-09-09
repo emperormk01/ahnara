@@ -38,6 +38,11 @@ When found, prefer rebuilding the orphaned arms as real handler functions over d
 - `ModelStore::new` creates dirs; anything writing under `~/.ahnara/` must `create_dir_all` first (`commands/model.rs:save_config` precedent). Tests run in parallel against real HOME: keep file side effects out of test bodies where possible.
 - Anthropic adapter must map the `tool` role to `tool_result` content blocks. Dropping tool messages breaks multi-turn tool conversations silently.
 
+## Agent loop conventions (`agent/mod.rs:process`)
+
+- Request lifecycle is logged at info level: request received (session, length, preview), each tool execution (name, args preview, iteration), final response (iterations, tool count, length). "Did she search" must be answerable from logs.
+- `detect_unexecuted_tool_call` guards the no-tool-call branch: output shaped like `{"name": ..., "parameters"|"arguments"|"args": ...}` triggers a system correction plus loop retry, bounded by `MAX_TOOL_JSON_RECOVERIES = 2`. Covered by unit tests in the file's `mod tests`. Small models emit tool calls as text; without this the raw JSON gets served as chat.
+
 ## Config conventions
 
 - Single source: `src/config/mod.rs`. `default_true()` lives there as `pub(crate)`; other modules reference `crate::config::default_true` in serde attrs. No local duplicates.

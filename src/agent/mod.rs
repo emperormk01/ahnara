@@ -107,12 +107,33 @@ fn format_duration(secs: u64) -> String {
     if secs < 60 {
         format!("{}s", secs)
     } else if secs < 3600 {
-        format!("{}m", secs / 60)
+        format!("{}m", secs / 3600)
     } else if secs < 86400 {
         format!("{}h", secs / 3600)
     } else {
         format!("{}d", secs / 86400)
     }
+}
+
+/// Detect model output that looks like a tool call written as plain text
+/// instead of a real function call (e.g. `{"name": "web_search", ...}`).
+/// Returns the claimed tool name when detected.
+fn detect_unexecuted_tool_call(content: &str) -> Option<String> {
+    let trimmed = content.trim();
+    if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(trimmed).ok()?;
+    let obj = v.as_object()?;
+    let name = obj.get("name")?.as_str()?;
+    if name.is_empty() {
+        return None;
+    }
+    if obj.contains_key("parameters") || obj.contains_key("arguments") || obj.contains_key("args") {
+        return Some(name.to_string());
+    }
+    None
+}
 }
 
 /// Core agent state
@@ -463,6 +484,13 @@ impl AgentCore {
             .map(|id| id.to_string())
             .unwrap_or_else(|| "default".to_string());
 
+        tracing::info!(
+            session = %session_key,
+            msg_chars = message.len(),
+            msg_preview = %message.chars().take(120).collect::<String>(),
+            "Agent request received"
+        );
+
         let effective_message = self
             .plugins
             .process_message_hooks(
@@ -501,6 +529,10 @@ impl AgentCore {
         let mut total_tool_calls: u32 = 0;
         let final_response: String;
         let mut tool_trace: Vec<ToolTraceEntry> = Vec::new();
+        // Recoveries for model output that looks like a tool call written
+        // as plain text instead of a real function call.
+        let mut tool_json_recoveries: u32 = 0;
+        const MAX_TOOL_JSON_RECOVERIES: u32 = 2;
 
         loop {
             iterations += 1;
@@ -540,6 +572,13 @@ impl AgentCore {
 
                             // Execute each tool
                             for tool_call in tool_calls {
+                                tracing::info!(
+                                    session = %session_key,
+                                    iteration = iterations,
+                                    tool = %tool_call.function.name,
+                                    args_preview = %tool_call.function.arguments.chars().take(200).collect::<String>(),
+                                    "Executing tool"
+                                );
                                 let result = self.execute_tool(tool_call).await;
                                 self.collect_structured_output(&result);
                                 total_tool_calls += 1;
@@ -583,8 +622,41 @@ impl AgentCore {
                         }
                     }
 
-                    // No tool calls - this is the final response
+                    // No tool calls - this is the final response, unless the
+                    // model wrote a tool call as plain text (a formatting
+                    // failure). Recover by telling it what went wrong and
+                    // letting the loop try again, bounded so we cannot spin.
+                    if let Some(tool_name) = detect_unexecuted_tool_call(&response.content) {
+                        if tool_json_recoveries < MAX_TOOL_JSON_RECOVERIES {
+                            tool_json_recoveries += 1;
+                            tracing::warn!(
+                                session = %session_key,
+                                iteration = iterations,
+                                tool = %tool_name,
+                                attempt = tool_json_recoveries,
+                                "Model wrote tool call as text; re-prompting"
+                            );
+                            messages.push(Message::new("assistant", &response.content));
+                            messages.push(Message::new(
+                                "system",
+                                "System correction: your previous message looked like a tool call but was sent as plain text, so nothing executed. Either make a real function call now, or answer the user directly in plain words with no JSON.",
+                            ));
+                            continue;
+                        }
+                        tracing::error!(
+                            session = %session_key,
+                            tool = %tool_name,
+                            "Model kept writing tool calls as text; giving up recovery"
+                        );
+                    }
                     final_response = response.content;
+                    tracing::info!(
+                        session = %session_key,
+                        iterations = iterations,
+                        tool_calls = total_tool_calls,
+                        response_chars = final_response.len(),
+                        "Agent response ready"
+                    );
                     break;
                 }
                 Err(e) => {
@@ -1409,5 +1481,38 @@ impl AgentCore {
     pub fn mcp_tools_for(&self, server_name: &str) -> Vec<String> {
         let prefix = format!("mcp_{}_", server_name);
         self.orchestrator.tools_with_prefix(&prefix)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::detect_unexecuted_tool_call;
+
+    #[test]
+    fn test_detects_tool_json_with_parameters() {
+        let out = detect_unexecuted_tool_call(
+            r#"{"name": "web_search", "parameters": {"query": "x"}}"#,
+        );
+        assert_eq!(out.as_deref(), Some("web_search"));
+    }
+
+    #[test]
+    fn test_detects_tool_json_with_arguments() {
+        let out = detect_unexecuted_tool_call(
+            r#"{"name": "execute_code", "arguments": {"language": "python"}}"#,
+        );
+        assert_eq!(out.as_deref(), Some("execute_code"));
+    }
+
+    #[test]
+    fn test_ignores_plain_prose() {
+        assert_eq!(detect_unexecuted_tool_call("The capital of France is Paris."), None);
+    }
+
+    #[test]
+    fn test_ignores_json_without_tool_shape() {
+        assert_eq!(detect_unexecuted_tool_call(r#"{"city": "Paris"}"#), None);
+        assert_eq!(detect_unexecuted_tool_call("not json at all"), None);
+        assert_eq!(detect_unexecuted_tool_call(""), None);
     }
 }
