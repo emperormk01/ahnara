@@ -55,6 +55,7 @@ When found, prefer rebuilding the orphaned arms as real handler functions over d
 ## Identity and branding
 
 - System prompt identity block (`persona/mod.rs`): "running on an independent AI agent framework called Ahnara. You were created by Emperor M.K (github.com/emperormk01/ahnara)."
+- Default voice (`DEFAULT_BEHAVIOR` in `persona/mod.rs`): feminine, warm, sharp, a little playful. Tasteful always, never explicit. Default tone is `Friendly`. Tool-discipline sections below the voice block stay intact. Users override voice via persona config, so keep voice and discipline in separate blocks.
 - No `Auxlo-xyz/ahnara` references anywhere (install scripts, update checker, docs, Cargo metadata). The org move is complete; do not regress.
 - Git identity for this repo: `Emperor M.K <emperormk01@gmail.com>`.
 
