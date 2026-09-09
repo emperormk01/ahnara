@@ -81,13 +81,22 @@ impl ProviderAdapter for GeminiAdapter {
             if let Some(ref parts) = msg.content_parts {
                 serde_json::json!({"role": msg.role, "content": parts})
             } else {
-                serde_json::json!({
+                // Only include optional fields when set. Strict providers
+                // reject explicit nulls (e.g. "name": null).
+                let mut m = serde_json::json!({
                     "role": msg.role,
                     "content": msg.content,
-                    "tool_calls": msg.tool_calls,
-                    "tool_call_id": msg.tool_call_id,
-                    "name": msg.name,
-                })
+                });
+                if let Some(ref tc) = msg.tool_calls {
+                    m["tool_calls"] = serde_json::to_value(tc).unwrap_or(serde_json::Value::Null);
+                }
+                if let Some(ref id) = msg.tool_call_id {
+                    m["tool_call_id"] = serde_json::json!(id);
+                }
+                if let Some(ref name) = msg.name {
+                    m["name"] = serde_json::json!(name);
+                }
+                m
             }
         }).collect();
 
