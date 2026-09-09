@@ -57,7 +57,11 @@ mod tests {
             None,
         );
         let body = a.transform_request(&req);
-        assert_eq!(body["system"], "You are a helper");
+        let sys = body["system"].as_array().unwrap();
+        assert_eq!(sys.len(), 1);
+        assert_eq!(sys[0]["type"], "text");
+        assert_eq!(sys[0]["text"], "You are a helper");
+        assert_eq!(sys[0]["cache_control"]["type"], "ephemeral");
         let msgs = body["messages"].as_array().unwrap();
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0]["role"], "user");
@@ -75,9 +79,10 @@ mod tests {
             None,
         );
         let body = a.transform_request(&req);
-        let sys = body["system"].as_str().unwrap();
-        assert!(sys.contains("Prompt part 1"));
-        assert!(sys.contains("Prompt part 2"));
+        let sys = body["system"].as_array().unwrap();
+        let text = sys[0]["text"].as_str().unwrap();
+        assert!(text.contains("Prompt part 1"));
+        assert!(text.contains("Prompt part 2"));
     }
 
     #[test]
@@ -239,3 +244,35 @@ mod tests {
         assert_eq!(r.content, "think");
     }
 }
+
+    #[test]
+    fn anthropic_tools_carry_cache_breakpoint() {
+        let a = AnthropicAdapter::new();
+        let tools = vec![
+            ToolDefinition {
+                tool_type: "function".into(),
+                function: FunctionDefinition {
+                    name: "one".into(),
+                    description: "First".into(),
+                    parameters: serde_json::json!({"type": "object"}),
+                },
+            },
+            ToolDefinition {
+                tool_type: "function".into(),
+                function: FunctionDefinition {
+                    name: "two".into(),
+                    description: "Second".into(),
+                    parameters: serde_json::json!({"type": "object"}),
+                },
+            },
+        ];
+        let req = make_request(
+            vec![Message::new("system", "s"), Message::new("user", "q")],
+            Some(tools),
+        );
+        let body = a.transform_request(&req);
+        let at = body["tools"].as_array().unwrap();
+        assert_eq!(at.len(), 2);
+        assert!(at[0].get("cache_control").is_none());
+        assert_eq!(at[1]["cache_control"]["type"], "ephemeral");
+    }

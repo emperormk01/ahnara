@@ -194,7 +194,13 @@ impl ProviderAdapter for AnthropicAdapter {
         });
 
         if !system_content.is_empty() {
-            body["system"] = serde_json::json!(system_content);
+            // Block form with a cache breakpoint: the system prompt is the
+            // largest static prefix, so pinning it lets repeat turns reuse it.
+            body["system"] = serde_json::json!([{
+                "type": "text",
+                "text": system_content,
+                "cache_control": {"type": "ephemeral"},
+            }]);
         }
 
         if let Some(temperature) = request.temperature {
@@ -203,14 +209,19 @@ impl ProviderAdapter for AnthropicAdapter {
 
         if let Some(tools) = &request.tools {
             if !tools.is_empty() {
-                let anthropic_tools: Vec<Value> = tools.iter().map(|t| {
+                let mut anthropic_tools: Vec<Value> = tools.iter().map(|t| {
                     serde_json::json!({
                         "name": t.function.name,
                         "description": t.function.description,
                         "input_schema": t.function.parameters,
                     })
                 }).collect();
-                body["tools"] = serde_json::json!(anthropic_tools);
+                // Cache breakpoint on the last tool: the tool list is static
+                // across turns, so it stays cached while messages grow.
+                if let Some(last) = anthropic_tools.last_mut() {
+                    last["cache_control"] = serde_json::json!({"type": "ephemeral"});
+                }
+                body["tools"] = serde_json::Value::Array(anthropic_tools);
             }
         }
 

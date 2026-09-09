@@ -13,6 +13,11 @@ pub trait Tool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
     fn parameters(&self) -> serde_json::Value;
+    /// Max chars of this tool's output kept in conversation context.
+    /// Defaults to 10_000; chatty tools override lower.
+    fn output_budget(&self) -> usize {
+        10_000
+    }
     async fn execute(&self, args: serde_json::Value) -> Result<ToolResult>;
 }
 
@@ -245,6 +250,15 @@ impl ToolOrchestrator {
 
     pub fn register(&self, tool: Arc<dyn Tool>) {
         self.registry.insert(tool.name().to_string(), tool);
+    }
+
+    /// Output budget (max context chars) for a tool by name.
+    /// Falls back to the trait default when the tool is unknown.
+    pub fn output_budget(&self, name: &str) -> usize {
+        self.registry
+            .get(name)
+            .map(|t| t.output_budget())
+            .unwrap_or(10_000)
     }
 
     pub fn list_tools(&self) -> Vec<ToolSpec> {

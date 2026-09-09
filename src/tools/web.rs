@@ -15,6 +15,8 @@ pub struct WebSearchTool;
 #[async_trait]
 impl Tool for WebSearchTool {
     fn name(&self) -> &str { "web_search" }
+
+    fn output_budget(&self) -> usize { 4_000 }
     
     fn description(&self) -> &str { 
         "Search the web using multiple engines (Google, DuckDuckGo, Brave, Yahoo, Mojeek, Startpage, Presearch) in parallel. No API key required. Returns JSON results with titles, URLs, and snippets."
@@ -605,6 +607,7 @@ pub struct WebFetchTool;
 #[async_trait]
 impl Tool for WebFetchTool {
     fn name(&self) -> &str { "web_fetch" }
+    fn output_budget(&self) -> usize { 6_000 }
     fn description(&self) -> &str {
         "Fetch a web page and return its content as text/markdown. Uses agent-browser (by Vercel). For reading page content, articles, documentation. No API key required."
     }

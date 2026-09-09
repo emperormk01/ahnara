@@ -38,6 +38,12 @@ When found, prefer rebuilding the orphaned arms as real handler functions over d
 - `ModelStore::new` creates dirs; anything writing under `~/.ahnara/` must `create_dir_all` first (`commands/model.rs:save_config` precedent). Tests run in parallel against real HOME: keep file side effects out of test bodies where possible.
 - Anthropic adapter must map the `tool` role to `tool_result` content blocks. Dropping tool messages breaks multi-turn tool conversations silently.
 
+## Token discipline (Sep 2026 — approved: caching, aging, budgets)
+
+- Anthropic adapter pins prompt-cache breakpoints on the system block and the last tool (`cache_control: ephemeral`). System must stay in block form for the breakpoint; `adapter_tests.rs` asserts the shape. OpenAI-compatible endpoints cache identical prefixes automatically, nothing to do there.
+- `age_tool_results` (`agent/mod.rs`) digests stale `tool`-role messages in the loop's working set: keeps newest 3 full, replaces older with `[aged:name]` digests. Idempotent (skips already-aged). Unit-tested.
+- Per-tool output budgets: `Tool::output_budget()` defaults to 10_000; `WebSearchTool` 4_000, `WebFetchTool` 6_000. `ToolOrchestrator::output_budget(name)` resolves with default fallback. `AgentCore::execute_tool` truncates the message-facing string to `min(budget, tool_output_max_chars)`. Full outputs stay intact in `ToolResult` for structured-output collection.
+
 ## Agent loop conventions (`agent/mod.rs:process`)
 
 - Request lifecycle is logged at info level: request received (session, length, preview), each tool execution (name, args preview, iteration), final response (iterations, tool count, length). "Did she search" must be answerable from logs.

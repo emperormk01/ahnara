@@ -115,6 +115,35 @@ fn format_duration(secs: u64) -> String {
     }
 }
 
+/// Digest stale tool results so long sessions stop resending every prior
+/// output on every turn. Keeps the newest few intact, replaces older ones
+/// with short digests. Runs in place on the loop's working messages.
+fn age_tool_results(messages: &mut Vec<Message>) {
+    const KEEP_FULL: usize = 3;
+    const DIGEST_CHARS: usize = 300;
+    let positions: Vec<usize> = messages
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.role == "tool")
+        .map(|(i, _)| i)
+        .collect();
+    if positions.len() <= KEEP_FULL {
+        return;
+    }
+    for &i in &positions[..positions.len() - KEEP_FULL] {
+        let msg = &mut messages[i];
+        let body = msg.content.clone().unwrap_or_default();
+        if body.starts_with("[aged:") {
+            continue;
+        }
+        let name = msg.name.clone().unwrap_or_else(|| "tool".into());
+        let short: String = body.chars().take(DIGEST_CHARS).collect();
+        let cut = body.len().saturating_sub(short.len());
+        tracing::debug!(tool = %name, from = body.len(), "Aged tool result to digest");
+        msg.content = Some(format!("[aged:{name}] {short}... (+{cut} chars digested)"));
+    }
+}
+
 /// Detect model output that looks like a tool call written as plain text
 /// instead of a real function call (e.g. `{"name": "web_search", ...}`).
 /// Returns the claimed tool name when detected.
@@ -549,6 +578,8 @@ impl AgentCore {
                 let lock = self.override_system_prompt.read().await;
                 lock.is_some()
             };
+            // Digest stale tool results so context stops growing linearly.
+            age_tool_results(&mut messages);
             let request = self.build_request(&messages, code_only);
 
             match self.providers.complete(request).await {
@@ -742,14 +773,35 @@ impl AgentCore {
             .execute_tool(&tool_call.function.name, args)
             .await;
 
-        if result.success {
+        let mut result_str = if result.success {
             serde_json::to_string(&result.output).unwrap_or_else(|_| result.output.to_string())
         } else {
             format!(
                 "Tool error: {}",
                 result.error.as_ref().unwrap_or(&"Unknown error".into())
             )
+        };
+
+        // Enforce the tool's output budget (capped by the global max) so one
+        // chatty tool cannot bloat every subsequent turn's context.
+        let cap = self
+            .orchestrator
+            .output_budget(&tool_call.function.name)
+            .min(self.config.agent.tool_output_max_chars);
+        if result_str.len() > cap {
+            tracing::info!(
+                tool = %tool_call.function.name,
+                from = result_str.len(),
+                to = cap,
+                "Truncated tool output to budget"
+            );
+            result_str = format!(
+                "{}... [truncated to {} chars by output budget]",
+                &result_str[..result_str.floor_char_boundary(cap)],
+                cap
+            );
         }
+        result_str
     }
 
     fn append_reflections(&self, system_prompt: &mut String, reflections: &[super::memory::reflector::Reflection]) {
@@ -1485,7 +1537,8 @@ impl AgentCore {
 
 #[cfg(test)]
 mod tests {
-    use super::detect_unexecuted_tool_call;
+    use super::{age_tool_results, detect_unexecuted_tool_call};
+    use crate::providers::Message;
 
     #[test]
     fn test_detects_tool_json_with_parameters() {
@@ -1513,5 +1566,56 @@ mod tests {
         assert_eq!(detect_unexecuted_tool_call(r#"{"city": "Paris"}"#), None);
         assert_eq!(detect_unexecuted_tool_call("not json at all"), None);
         assert_eq!(detect_unexecuted_tool_call(""), None);
+    }
+}
+
+#[cfg(test)]
+mod aging_tests {
+    use super::age_tool_results;
+    use crate::providers::Message;
+
+    fn tool_msg(name: &str, body: &str) -> Message {
+        Message::tool_result("id-1", name, body)
+    }
+
+    #[test]
+    fn test_keeps_newest_three_full() {
+        let mut msgs = vec![
+            Message::new("system", "sys"),
+            tool_msg("a", &"x".repeat(2000)),
+            tool_msg("b", &"y".repeat(2000)),
+            tool_msg("c", &"z".repeat(2000)),
+        ];
+        age_tool_results(&mut msgs);
+        assert!(!msgs[1].content.as_deref().unwrap().starts_with("[aged:"));
+    }
+
+    #[test]
+    fn test_digests_older_results() {
+        let mut msgs = vec![
+            tool_msg("web_search", &"q".repeat(2000)),
+            tool_msg("web_fetch", "fresh-1"),
+            tool_msg("web_fetch", "fresh-2"),
+            tool_msg("web_fetch", "fresh-3"),
+        ];
+        age_tool_results(&mut msgs);
+        let first = msgs[0].content.as_deref().unwrap();
+        assert!(first.starts_with("[aged:web_search]"));
+        assert!(first.len() < 2000);
+        assert_eq!(msgs[3].content.as_deref().unwrap(), "fresh-3");
+    }
+
+    #[test]
+    fn test_idempotent_on_aged() {
+        let mut msgs = vec![
+            tool_msg("a", "old-1"),
+            tool_msg("b", "old-2"),
+            tool_msg("c", "old-3"),
+            tool_msg("d", "new"),
+        ];
+        age_tool_results(&mut msgs);
+        let once = msgs[0].content.clone().unwrap();
+        age_tool_results(&mut msgs);
+        assert_eq!(msgs[0].content.as_deref().unwrap(), once);
     }
 }
