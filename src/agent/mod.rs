@@ -134,7 +134,6 @@ fn detect_unexecuted_tool_call(content: &str) -> Option<String> {
     }
     None
 }
-}
 
 /// Core agent state
 pub struct AgentCore {
