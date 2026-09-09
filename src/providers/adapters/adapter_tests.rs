@@ -243,7 +243,6 @@ mod tests {
         let r = a.parse_response(&body.to_string()).unwrap();
         assert_eq!(r.content, "think");
     }
-}
 
     #[test]
     fn anthropic_tools_carry_cache_breakpoint() {
@@ -276,3 +275,4 @@ mod tests {
         assert!(at[0].get("cache_control").is_none());
         assert_eq!(at[1]["cache_control"]["type"], "ephemeral");
     }
+}
