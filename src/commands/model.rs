@@ -664,6 +664,9 @@ fn update_providers_section(
 }
 
 fn save_config(config_path: &std::path::Path, doc: &toml::Value) -> Result<()> {
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let rendered = toml::to_string_pretty(doc)?;
     std::fs::write(config_path, &rendered)?;
     tighten_config_permissions(config_path);

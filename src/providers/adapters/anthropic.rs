@@ -100,6 +100,18 @@ impl AnthropicAdapter {
         }
     }
 
+    fn transform_tool_message(&self, msg: &crate::providers::Message) -> Value {
+        let content = msg.content.as_deref().unwrap_or("");
+        serde_json::json!({
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": msg.tool_call_id.as_deref().unwrap_or(""),
+                "content": content,
+            }],
+        })
+    }
+
     async fn process_stream_event(event: &Value, tx: &mpsc::Sender<StreamChunk>) {
         if let Some(event_type) = event.get("type").and_then(|t| t.as_str()) {
             match event_type {
@@ -167,6 +179,9 @@ impl ProviderAdapter for AnthropicAdapter {
                 }
                 "assistant" => {
                     messages.push(self.transform_assistant_message(msg));
+                }
+                "tool" => {
+                    messages.push(self.transform_tool_message(msg));
                 }
                 _ => {}
             }
