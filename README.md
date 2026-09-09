@@ -485,4 +485,4 @@ PolyForm Noncommercial 1.0.0 - see [LICENSE](LICENSE) file.
 
 ---
 
-**Built with love by [Auxlo.xyz](https://auxlo.xyz)**
+**Built with love by [Emperor M.K](https://github.com/emperormk01)**

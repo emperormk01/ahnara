@@ -27,7 +27,7 @@
 ---
 name: skill-name
 description: What it does and when to use it.
-license: MIT
+license: PolyForm-Noncommercial-1.0.0
 compatibility: Requires Python 3.11+
 metadata:
   author: example
