@@ -16,6 +16,9 @@ pub fn handle_config(action: crate::cli::ConfigCommands) -> Result<()> {
             println!("{}", config_path.display());
             Ok(())
         }
+        crate::cli::ConfigCommands::Edit => handle_edit_config(&config_path),
+        crate::cli::ConfigCommands::Reset { yes } => handle_reset_config(&config_path, yes),
+        crate::cli::ConfigCommands::Validate => handle_validate_config(&config_path),
     }
 }
 
@@ -135,100 +138,51 @@ fn format_value(value: &str) -> String {
         format!("\"{}\"", value)
     }
 }
-                        break;
-                    }
-                } else if parts.len() == 2 {
-                    // Section.key format
-                    if let Some(ref section) = in_section {
-                        if section == parts[0] {
-                            if line.starts_with(&format!("{} = ", parts[1])) || 
-                               line.trim().starts_with(&format!("{} = ", parts[1])) {
-                                // Preserve indentation
-                                let indent = if line.starts_with("  ") { "  " } else { "" };
-                                lines[i] = format!("{}{} = {}", indent, parts[1], value_str);
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            if !found {
-                // Try to add the key if section exists
-                if parts.len() == 2 {
-                    let mut added = false;
-                    for i in 0..lines.len() {
-                        if lines[i] == format!("[{}]", parts[0]) {
-                            // Add after section header
-                            lines.insert(i + 1, format!("{} = {}", parts[1], value_str));
-                            added = true;
-                            break;
-                        }
-                    }
-                    if !added {
-                        // Add section and key at end
-                        lines.push(format!("[{}]", parts[0]));
-                        lines.push(format!("{} = {}", parts[1], value_str));
-                    }
-                    found = true;
-                }
-            }
-            
-            if found {
-                let new_content = lines.join("\n") + "\n";
-                fs::write(&config_path, new_content)?;
-                println!("✅ Set {} = {}", key, value);
-            } else {
-                bail!("Could not find or create key: {}", key);
-            }
-        }
         
-        crate::cli::ConfigCommands::Edit => {
-            let editor = std::env::var("EDITOR").unwrap_or_else(|_| "nano".into());
-            let status = std::process::Command::new(&editor)
-                .arg(&config_path)
-                .status()?;
-            
-            if status.success() {
-                println!("Config updated.");
-            } else {
-                bail!("Editor exited with error");
-            }
-        }
-        
-        crate::cli::ConfigCommands::Reset { yes } => {
-            if !yes {
-                println!("This will reset all configuration to defaults.");
-                let confirm = dialoguer::Confirm::new()
-                    .with_prompt("Continue?")
-                    .default(false)
-                    .interact()?;
-                
-                if !confirm {
-                    println!("Cancelled.");
-                    return Ok(());
-                }
-            }
-            
-            if config_path.exists() {
-                fs::remove_file(&config_path)?;
-            }
-            println!("Configuration reset. Run `ahnara setup` to configure.");
-        }
-        
-        crate::cli::ConfigCommands::Validate => {
-            if !config_path.exists() {
-                bail!("Config file not found. Run `ahnara setup` first.");
-            }
-            
-            let content = fs::read_to_string(&config_path)?;
-            match toml::from_str::<crate::config::AppConfig>(&content) {
-                Ok(_) => println!("✅ Configuration is valid."),
-                Err(e) => bail!("Configuration error: {}", e),
-            }
+fn handle_edit_config(config_path: &std::path::Path) -> Result<()> {
+    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "nano".into());
+    let status = std::process::Command::new(&editor)
+        .arg(config_path)
+        .status()?;
+
+    if status.success() {
+        println!("Config updated.");
+    } else {
+        bail!("Editor exited with error");
+    }
+    Ok(())
+}
+
+fn handle_reset_config(config_path: &std::path::Path, yes: bool) -> Result<()> {
+    if !yes {
+        println!("This will reset all configuration to defaults.");
+        let confirm = dialoguer::Confirm::new()
+            .with_prompt("Continue?")
+            .default(false)
+            .interact()?;
+
+        if !confirm {
+            println!("Cancelled.");
+            return Ok(());
         }
     }
-    
+
+    if config_path.exists() {
+        fs::remove_file(config_path)?;
+    }
+    println!("Configuration reset. Run `ahnara setup` to configure.");
+    Ok(())
+}
+
+fn handle_validate_config(config_path: &std::path::Path) -> Result<()> {
+    if !config_path.exists() {
+        bail!("Config file not found. Run `ahnara setup` first.");
+    }
+
+    let content = fs::read_to_string(config_path)?;
+    match toml::from_str::<crate::config::AppConfig>(&content) {
+        Ok(_) => println!("✅ Configuration is valid."),
+        Err(e) => bail!("Configuration error: {}", e),
+    }
     Ok(())
 }
