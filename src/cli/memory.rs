@@ -82,6 +82,8 @@ pub fn handle_memory_command(subcmd: &MemorySubcommand) -> Result<()> {
         MemorySubcommand::Sessions => handle_sessions(&store),
         MemorySubcommand::Preferences => handle_preferences(&store),
         MemorySubcommand::Observations { r#type, limit } => handle_observations(&store, r#type.as_deref(), *limit),
+        MemorySubcommand::Stats => handle_stats(&store),
+        MemorySubcommand::Export => handle_export(&store),
     }
 }
 
@@ -209,34 +211,31 @@ fn handle_observations(store: &MemoryStore, r#type: Option<&str>, limit: usize) 
     }
     Ok(())
 }
-        }
 
-        MemorySubcommand::Stats => {
-            let sessions = store.session_count()?;
-            let reflections = store.reflection_count()?;
-            let facts = store.fact_count()?;
-            let observations = store.observation_count()?;
-            println!(
-                "Sessions:      {}\nReflections:   {}\nFacts:         {}\nObservations:  {}",
-                sessions, reflections, facts, observations
-            );
-        }
+fn handle_stats(store: &MemoryStore) -> Result<()> {
+    let sessions = store.session_count()?;
+    let reflections = store.reflection_count()?;
+    let facts = store.fact_count()?;
+    let observations = store.observation_count()?;
+    println!(
+        "Sessions:      {}\nReflections:   {}\nFacts:         {}\nObservations:  {}",
+        sessions, reflections, facts, observations
+    );
+    Ok(())
+}
 
-        MemorySubcommand::Export => {
-            let facts = store.list_facts()?;
-            let prefs = store.get_preferences(None)?;
-            let reflections = store.get_reflections(None, 1000)?;
-            let observations = store.get_recent_observations(1000)?;
+fn handle_export(store: &MemoryStore) -> Result<()> {
+    let facts = store.list_facts()?;
+    let prefs = store.get_preferences(None)?;
+    let reflections = store.get_reflections(None, 1000)?;
+    let observations = store.get_recent_observations(1000)?;
 
-            let export = serde_json::json!({
-                "facts": facts,
-                "preferences": prefs,
-                "reflections": reflections,
-                "observations": observations,
-            });
-            println!("{}", serde_json::to_string_pretty(&export)?);
-        }
-    }
-
+    let export = serde_json::json!({
+        "facts": facts,
+        "preferences": prefs,
+        "reflections": reflections,
+        "observations": observations,
+    });
+    println!("{}", serde_json::to_string_pretty(&export)?);
     Ok(())
 }
