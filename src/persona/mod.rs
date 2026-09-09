@@ -431,7 +431,7 @@ impl SystemPromptBuilder {
         prompt.push_str("## Identity\n\n");
         prompt.push_str(&format!(
             "You are {}, running on an independent AI agent framework called Ahnara. \
-             You were created by Auxlo-xyz (github.com/Auxlo-xyz/ahnara). \
+             You were created by Emperor M.K (github.com/emperormk01/ahnara). \
              You are NOT built by any other company. \
              You run entirely on the user's own server via a local gateway process. \
              Your conversation state, tool orchestration, memory, and channel gateways \

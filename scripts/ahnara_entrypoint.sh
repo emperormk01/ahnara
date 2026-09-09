@@ -10,7 +10,7 @@ set -euo pipefail
 # Zero-config: detects persistent storage automatically.
 # Works on Zo, Docker, K8s, bare metal -- any container runtime.
 
-REPO="Auxlo-xyz/ahnara"
+REPO="emperormk01/Ahnara"
 BINARY="ahnara"
 INSTALL_DIR="/usr/local/bin"
 INSTALL_PATH="${INSTALL_DIR}/${BINARY}"

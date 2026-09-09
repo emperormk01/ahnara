@@ -483,13 +483,6 @@ impl AgentCore {
         self.append_reflections(&mut system_prompt, &reflections);
         self.append_scheduled_jobs(&mut system_prompt);
 
-        // Build provider request
-                        system_prompt.push('\n');
-                    }
-                }
-            }
-        }
-
         let mut messages = build_pruned_messages(
             system_prompt,
             &history,

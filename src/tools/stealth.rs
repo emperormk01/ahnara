@@ -162,7 +162,7 @@ fn check_scrapling() -> Result<()> {
     // Check helper script
     if !std::path::Path::new(HELPER_SCRIPT).exists() {
         return Err(anyhow!(
-            "stealth_fetch helper script not found at {}. Reinstall ahnara to deploy it:\n  curl -fsSL https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/get.sh | bash",
+            "stealth_fetch helper script not found at {}. Reinstall ahnara to deploy it:\n  curl -fsSL https://raw.githubusercontent.com/emperormk01/Ahnara/master/get.sh | bash",
             HELPER_SCRIPT
         ));
     }

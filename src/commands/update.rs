@@ -2,7 +2,7 @@
 
 use std::process::Command;
 
-const REPO: &str = "Auxlo-xyz/ahnara";
+const REPO: &str = "emperormk01/Ahnara";
 const INSTALL_PATH: &str = "/usr/local/bin/ahnara";
 
 /// Run the update cycle and return a human-readable result string.

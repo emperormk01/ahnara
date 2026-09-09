@@ -7,7 +7,7 @@ set -euo pipefail
 
 LOCKFILE="/tmp/ahnara_watchdog.lock"
 LOGFILE="/tmp/ahnara_watchdog.log"
-REPO="Auxlo-xyz/ahnara"
+REPO="emperormk01/Ahnara"
 BINARY="ahnara"
 INSTALL_DIR="/usr/local/bin"
 INSTALL_PATH="${INSTALL_DIR}/${BINARY}"

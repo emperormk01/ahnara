@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # ahnara Installer
-# Usage: curl -sSL https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/emperormk01/Ahnara/master/install.sh | bash
 # Options:
 #   ahnara_VERSION       - specific version tag (default: latest)
 #   ahnara_DIR           - install directory (default: /usr/local/bin)
 #   ahnara_SKIP_CONFIRM  - set to 1 to skip confirmation prompt
 
-REPO="Auxlo-xyz/ahnara"
+REPO="emperormk01/Ahnara"
 BINARY="ahnara"
 INSTALL_DIR="${ahnara_DIR:-/usr/local/bin}"
 GITHUB_API="https://api.github.com/repos/${REPO}/releases"
@@ -259,7 +259,7 @@ with sync_playwright() as p:
     if [ ! -f "$HELPER_PATH" ]; then
         info "Deploying stealth_fetch helper script..."
         mkdir -p "$HELPER_DIR"
-        curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/stealth_fetch_helper.py" \
+        curl -fsSL "https://raw.githubusercontent.com/emperormk01/Ahnara/master/scripts/stealth_fetch_helper.py" \
             -o "$HELPER_PATH" \
             && chmod +x "$HELPER_PATH" \
             || warn "Failed to download stealth_fetch helper script"
@@ -270,7 +270,7 @@ with sync_playwright() as p:
     # Deploy watchdog script (auto-restarts gateway if it crashes)
     local WATCHDOG_BIN="/usr/local/bin/ahnara_watchdog.sh"
     info "Deploying watchdog script..."
-    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/ahnara_watchdog.sh" \
+    curl -fsSL "https://raw.githubusercontent.com/emperormk01/Ahnara/master/scripts/ahnara_watchdog.sh" \
         -o "$WATCHDOG_BIN" \
         && chmod +x "$WATCHDOG_BIN" \
         || warn "Failed to deploy watchdog script"
@@ -278,7 +278,7 @@ with sync_playwright() as p:
     # Deploy self-healing entrypoint (auto-reinstalls binary on container reset)
     local ENTRYPOINT_BIN="/usr/local/bin/ahnara_entrypoint.sh"
     info "Deploying self-healing entrypoint..."
-    curl -fsSL "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/ahnara_entrypoint.sh" \
+    curl -fsSL "https://raw.githubusercontent.com/emperormk01/Ahnara/master/scripts/ahnara_entrypoint.sh" \
         -o "$ENTRYPOINT_BIN" \
         && chmod +x "$ENTRYPOINT_BIN" \
         || warn "Failed to deploy entrypoint script"

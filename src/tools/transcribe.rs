@@ -54,7 +54,7 @@ fn find_script() -> PathBuf {
     if let Some(parent) = deploy_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let url = "https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/scripts/transcribe.py";
+    let url = "https://raw.githubusercontent.com/emperormk01/Ahnara/master/scripts/transcribe.py";
     let download = std::process::Command::new("curl")
         .args(["-fsSL", url, "-o", deploy_path.to_str().unwrap_or("")])
         .output();
@@ -108,7 +108,7 @@ pub fn transcribe_audio_sync(
     let script = find_script();
     if !script.exists() {
         return Err(format!(
-            "Transcription script not found at {}. Run: curl -fsSL https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/get.sh | bash",
+            "Transcription script not found at {}. Run: curl -fsSL https://raw.githubusercontent.com/emperormk01/Ahnara/master/get.sh | bash",
             script.display()
         ));
     }

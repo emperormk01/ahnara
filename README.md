@@ -50,7 +50,7 @@ ahnara operates on a core mental model where the agent:
 ### 1. Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Auxlo-xyz/ahnara/master/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/emperormk01/Ahnara/master/get.sh | bash
 ```
 
 Downloads a pre-built static binary for your platform (Linux or macOS, x86_64 or aarch64). No Rust required.
