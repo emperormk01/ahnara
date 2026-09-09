@@ -291,10 +291,14 @@ impl OpenAICompatibleProvider {
         client: Client,
         extra_headers: Option<HashMap<String, String>>,
     ) -> Self {
-        // Determine provider type from API base
+        // Determine provider type from API base.
+        // A Google base pointing at the OpenAI-compatible path stays on the
+        // OpenAI wire format (Bearer auth); only native bases use GeminiAdapter.
         let provider_type = if api_base.contains("nvidia") {
             "nvidia"
-        } else if api_base.contains("google") || api_base.contains("generativelanguage") {
+        } else if api_base.contains("generativelanguage") && !api_base.contains("/openai") {
+            "google"
+        } else if api_base.contains("google") && !api_base.contains("/openai") {
             "google"
         } else if api_base.contains("openai") {
             "openai"
