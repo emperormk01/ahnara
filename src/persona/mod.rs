@@ -300,6 +300,15 @@ impl SystemPromptBuilder {
         let mut names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
         names.sort_unstable();
         names.dedup();
+        let short_purpose = |description: &str| -> String {
+            let first = description.split(['.', '\n']).next().unwrap_or("").trim();
+            let short: String = first.chars().take(100).collect();
+            if short.is_empty() {
+                "No description.".into()
+            } else {
+                short
+            }
+        };
         for name in names {
             let purpose = tools
                 .iter()
@@ -311,18 +320,6 @@ impl SystemPromptBuilder {
         self.tools_index = index;
         self
     }
-
-/// One-line purpose for the compact tool index: first sentence of the
-/// description, capped so the index stays cheap.
-fn short_purpose(description: &str) -> String {
-    let first = description.split(['.', '\n']).next().unwrap_or("").trim();
-    let short: String = first.chars().take(100).collect();
-    if short.is_empty() {
-        "No description.".into()
-    } else {
-        short
-    }
-}
 
     fn build_tools_description(&self, tools: &[super::orchestrator::ToolDefinition]) -> String {
         let mut desc = String::from("## Available Tools\n\n");

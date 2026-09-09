@@ -589,6 +589,8 @@ impl AgentCore {
         self.append_reflections(&mut system_prompt, &reflections);
         self.append_scheduled_jobs(&mut system_prompt);
 
+        // Length captured before the move below; used by the per-iteration log.
+        let system_chars = system_prompt.len();
         let mut messages = build_pruned_messages(
             system_prompt,
             &history,
@@ -638,7 +640,7 @@ impl AgentCore {
                 tracing::info!(
                     session = %session_key,
                     iteration = iterations,
-                    system_chars = system_prompt.len(),
+                    system_chars = system_chars,
                     tools = filtered_tools.len(),
                     tools_chars = tools_chars,
                     messages = messages.len(),
