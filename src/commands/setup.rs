@@ -350,21 +350,6 @@ fn save_config(
 
     Ok(())
 }
-    }
-    if enable_discord {
-        println!("  Discord: enabled");
-    }
-    if enable_github_mcp {
-        println!("  GitHub MCP: enabled (26 tools)");
-    }
-    if !extra_mcp_servers.is_empty() {
-        println!("  Extra MCP servers: {}", extra_mcp_servers.len());
-    }
-    
-    println!("\nSetup complete! Run `ahnara gateway` to start.");
-    
-    Ok(())
-}
 
 fn quick_setup(config_dir: &PathBuf, telegram: bool, discord: bool) -> Result<()> {
     if !config_dir.exists() {

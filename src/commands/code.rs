@@ -406,10 +406,6 @@ fn print_coding_help() {
     println!("  workspace      - Show workspace path");
     println!();
 }
-    }
-
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {
