@@ -126,7 +126,7 @@ impl EventHandler for DiscordHandler {
                     let code_session = agent.get_or_create_session_id("discord-code", &uid);
                     agent.clear_system_prompt_override(&code_session).await;
                     agent.reset_session_routing("discord-code", &uid);
-                    if let Err(e) = msg_channel.say(&http, "Exited coding mode. Back to normal.").await {
+                    if let Err(e) = msg_channel.say(&http, "Back to normal. No coding here - use /code when you need that. Chat, ideas, advice, fun stuff: all mine.").await {
                         error!("Failed to send Discord message: {}", e);
                     }
                     return;

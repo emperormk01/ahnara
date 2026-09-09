@@ -439,8 +439,7 @@ async fn handle_recover_cmd(state: &TelegramState, chat_id: i64) -> String {
 }
 
 fn handle_help_cmd() -> String {
-    "Commands: /memory /clear /tools /usage /recover /status /voice /persona /new /update /code /normal"
-        .to_string()
+    "Commands: /memory /clear /tools /usage /recover /status /voice /persona /new /update /code /normal\n\nNormal mode is for chat, ideas, advice, and fun - no coding here, use /code for that.".to_string()
 }
 
 async fn handle_status_cmd(state: &TelegramState, chat_id: i64) -> String {
@@ -479,7 +478,7 @@ async fn handle_code_cmd(state: &TelegramState, chat_id: i64) -> String {
     state.agent.set_session_context("telegram", &user_id).await;
     state.agent.set_system_prompt_override(&session_id, code_prompt).await;
     format!(
-        "Coding mode activated.\nWorkspace: {}\n\nSend your coding task as the next message. Use /normal to exit coding mode.",
+        "Coding mode activated.\nWorkspace: {}\n\nSend your coding task as the next message. Use /normal to exit coding mode and come back to chat.",
         workspace.display()
     )
 }
@@ -584,7 +583,7 @@ async fn handle_normal_cmd(state: &TelegramState, chat_id: i64) -> String {
     let code_session = state.agent.get_or_create_session_id("telegram-code", &user_id);
     state.agent.clear_system_prompt_override(&code_session).await;
     state.agent.reset_session_routing("telegram-code", &user_id);
-    "Exited coding mode. Back to normal.".to_string()
+    "Back to normal. No coding here - use /code when you need that. Chat, ideas, advice, fun stuff: all mine.".to_string()
 }
 
 async fn handle_new_cmd(state: &TelegramState, chat_id: i64) -> String {
@@ -910,7 +909,7 @@ async fn handle_message(bot: Bot, msg: Message, state: Arc<TelegramState>) -> Re
         let code_session = state.agent.get_or_create_session_id("telegram-code", &user_id);
         state.agent.clear_system_prompt_override(&code_session).await;
         state.agent.reset_session_routing("telegram-code", &user_id);
-        send_markdown_message(&bot, chat_id, "Exited coding mode. Back to normal.").await?;
+        send_markdown_message(&bot, chat_id, "Back to normal. No coding here - use /code when you need that. Chat, ideas, advice, fun stuff: all mine.").await?;
         return Ok(());
     }
 

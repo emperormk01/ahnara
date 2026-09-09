@@ -7,7 +7,7 @@ Rust AI agent framework. Binary crate (`src/main.rs`), edition 2021. Repo: `empe
 No Rust toolchain in this environment. Never assume local `cargo` works. Push and read CI.
 
 - Workflow: `.github/workflows/ci.yml` — runs `cargo check --all-targets`, `cargo clippy --all-targets -- -D clippy::correctness -D clippy::suspicious`, `cargo test` on every push and PR.
-- `release.yml` builds release binaries on `v*` tags only.
+- `release.yml` builds release binaries on `v*` tags only. Release uses thin LTO (fat LTO plus `codegen-units = 1` pushed builds past 20 minutes) and `rust-cache` per target. Do not restore fat LTO without measuring.
 - Clippy gate is deliberately scoped to correctness plus suspicious. Do not add blanket `-D warnings`: it denies ~150 style lints including API-redesign demands (`too_many_arguments`). Style stays advisory.
 - After pushing, poll `GET /repos/emperormk01/Ahnara/actions/runs`, then fetch the failed job's logs via the jobs API. Iterate until green.
 
@@ -37,6 +37,8 @@ When found, prefer rebuilding the orphaned arms as real handler functions over d
 - `SkillMeta` has no `version` field. It has `compatibility`. Check `skills/mod.rs` before touching metadata fields.
 - `ModelStore::new` creates dirs; anything writing under `~/.ahnara/` must `create_dir_all` first (`commands/model.rs:save_config` precedent). Tests run in parallel against real HOME: keep file side effects out of test bodies where possible.
 - Anthropic adapter must map the `tool` role to `tool_result` content blocks. Dropping tool messages breaks multi-turn tool conversations silently.
+- Code-mode overrides are per-session (`HashMap` in `AgentCore`, hydrated from the `CodeModeStore` disk cache on miss). Never a global slot: one user's `/code` must not leak into another's session. The override path appends the identity block (name, Emperor M.K. credit, feminine voice), so she stays herself in code mode.
+- Normal mode does no coding: `/help`, `/code`, and `/normal` replies state the split (chat, ideas, advice, fun in normal; coding behind `/code`). Enforced by messaging, not heuristics.
 
 ## Token discipline (Sep 2026 — approved: caching, aging, budgets)
 
@@ -48,6 +50,7 @@ When found, prefer rebuilding the orphaned arms as real handler functions over d
 
 - Request lifecycle is logged at info level: request received (session, length, preview), each tool execution (name, args preview, iteration), final response (iterations, tool count, length). "Did she search" must be answerable from logs.
 - `detect_unexecuted_tool_call` guards the no-tool-call branch: output shaped like `{"name": ..., "parameters"|"arguments"|"args": ...}` triggers a system correction plus loop retry, bounded by `MAX_TOOL_JSON_RECOVERIES = 2`. Covered by unit tests in the file's `mod tests`. Small models emit tool calls as text; without this the raw JSON gets served as chat.
+- Thought hygiene: `<thought>` blocks and reasoning fallbacks are stripped BEFORE history store (`thought_re` right after unregister). Never store raw model output, or every future turn re-pays for it. Thought signatures are never echoed on plain turns; echoing them back for Gemini function-call continuity is still open.
 
 ## Config conventions
 

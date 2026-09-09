@@ -41,6 +41,10 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+
       - name: Install musl-tools
         if: ${{ runner.os == 'Linux' && !matrix.use_cross }}
         run: |

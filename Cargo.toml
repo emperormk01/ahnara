@@ -80,8 +80,7 @@ name = "ahnara"
 path = "src/main.rs"
 
 [profile.release]
-lto = true
-codegen-units = 1
+lto = "thin"
 strip = true
 opt-level = 3
 

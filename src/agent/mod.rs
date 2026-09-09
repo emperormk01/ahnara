@@ -193,7 +193,7 @@ pub struct AgentCore {
     subagent_context: Arc<parking_lot::RwLock<(Option<String>, Option<String>)>>,
     /// When true, skip loading persona from disk and use config.persona directly.
     /// Used by /code mode to enforce the coding agent persona.
-    override_system_prompt: Arc<RwLock<Option<String>>>,
+    override_system_prompt: Arc<RwLock<HashMap<String, String>>>,
     /// Shared run log from the cron scheduler (if started)
     schedule_log: Option<crate::scheduler::ScheduleRunLog>,
     /// SQLite memory store for cross-session context
@@ -288,7 +288,7 @@ impl AgentCore {
             current_channel: parking_lot::RwLock::new(Option::<String>::None),
             current_user_id: parking_lot::RwLock::new(Option::<String>::None),
             subagent_context,
-            override_system_prompt: Arc::new(RwLock::new(None)),
+            override_system_prompt: Arc::new(RwLock::new(HashMap::new())),
             schedule_log,
             memory_store,
             last_structured_outputs: parking_lot::RwLock::new(Vec::new()),
@@ -448,8 +448,8 @@ impl AgentCore {
         if let Err(e) = self.code_mode.activate(session_key, prompt.clone()) {
             tracing::warn!("Failed to persist code mode override: {}", e);
         }
-        let mut override_prompt = self.override_system_prompt.write().await;
-        *override_prompt = Some(prompt);
+        let mut overrides = self.override_system_prompt.write().await;
+        overrides.insert(session_key.to_string(), prompt);
     }
 
     pub async fn clear_system_prompt_override(&self, session_key: &str) {
@@ -457,8 +457,21 @@ impl AgentCore {
         if let Err(e) = self.code_mode.deactivate(session_key) {
             tracing::warn!("Failed to remove persisted code mode: {}", e);
         }
-        let mut override_prompt = self.override_system_prompt.write().await;
-        *override_prompt = None;
+        let mut overrides = self.override_system_prompt.write().await;
+        overrides.remove(session_key);
+    }
+
+    /// Look up the code-mode override for one session only. Hydrates from
+    /// disk on miss so restarts do not silently drop code mode.
+    async fn code_override(&self, session_key: &str) -> Option<String> {
+        if let Some(prompt) = self.override_system_prompt.read().await.get(session_key).cloned() {
+            return Some(prompt);
+        }
+        if let Some(prompt) = self.get_persisted_code_override(session_key) {
+            self.override_system_prompt.write().await.insert(session_key.to_string(), prompt.clone());
+            return Some(prompt);
+        }
+        None
     }
     
     /// Check if a session has a persisted code mode override
@@ -574,10 +587,7 @@ impl AgentCore {
                 break;
             }
 
-            let code_only = {
-                let lock = self.override_system_prompt.read().await;
-                lock.is_some()
-            };
+            let code_only = self.code_override(&session_key).await.is_some();
             // Digest stale tool results so context stops growing linearly.
             age_tool_results(&mut messages);
             let request = self.build_request(&messages, code_only);
@@ -707,6 +717,12 @@ impl AgentCore {
         // Unregister intervention channel
         self.intervention_registry.unregister(&session_key).await;
 
+        // Strip thought/reasoning blocks BEFORE storing. Raw model output
+        // (reasoning fallbacks, <thought> blocks) must never enter history,
+        // or every future turn re-pays for it.
+        let thought_re = Regex::new(r"(?s)<thought>.*?</thought>").unwrap();
+        let final_response = thought_re.replace_all(&final_response, "").to_string();
+
         // Store in history
         self.add_to_history(&session_key, "user", &effective_message)
             .await;
@@ -739,22 +755,20 @@ impl AgentCore {
             });
         }
 
-        // Filter out <thought></thought> blocks including content using regex
-        let re = Regex::new(r"(?s)<thought>.*?</thought>").unwrap();
-        let filtered_response = re.replace_all(&final_response, "").to_string();
-        let filtered_response = self
+        // Run message hooks on the already-filtered response.
+        let final_response = self
             .plugins
             .process_message_hooks(
                 HookEvent::AfterMessage,
                 Some(&session_key),
-                filtered_response,
+                final_response,
             )
             .await;
 
         // Update last activity timestamp for the session
         self.touch_activity(&session_key).await;
 
-        filtered_response
+        final_response
     }
 
     async fn execute_tool(&self, tool_call: &ToolCall) -> String {
@@ -1036,31 +1050,30 @@ impl AgentCore {
         CapabilityManifest::new(&self.config, Some(&self.orchestrator))
     }
 
-    async fn build_system_prompt(&self, _session_key: &str) -> String {
+    async fn build_system_prompt(&self, session_key: &str) -> String {
         use crate::persona::SystemPromptBuilder;
 
         let tools = self.orchestrator.get_definitions();
         let capability_summary = self.capability_manifest().prompt_summary();
         let mcp_summaries = self.orchestrator.mcp_summaries();
 
-        // Check if there's an override system prompt (e.g., /code mode)
-        {
-            let override_lock = self.override_system_prompt.read().await;
-            if let Some(ref override_prompt) = *override_lock {
-                tracing::info!("[build_system_prompt] OVERRIDE active - bypassing persona, using custom prompt ({} chars)", override_prompt.len());
-                let mut prompt = format!("{}\n\n{}", override_prompt, capability_summary);
-                prompt.push_str(&format!(
-                    "\n\n## Your Identity\nYou are powered by the `{}` LLM.",
-                    self.resolved_model_name()
-                ));
-                if !mcp_summaries.is_empty() {
-                    prompt.push_str("\n\n## Connected Integrations (MCP)\n");
-                    for s in &mcp_summaries {
-                        prompt.push_str(&format!("- {}\n", s));
-                    }
+        // Check if there's an override system prompt (e.g., /code mode).
+        // Per-session only: one user's code mode never leaks into another's.
+        if let Some(override_prompt) = self.code_override(session_key).await {
+            tracing::info!("[build_system_prompt] OVERRIDE active - bypassing persona, using custom prompt ({} chars)", override_prompt.len());
+            let mut prompt = format!("{}\n\n{}", override_prompt, capability_summary);
+            prompt.push_str(&format!(
+                "\n\n## Your Identity\nYou are {}, created by Emperor M.K, running on the Ahnara framework. You present as feminine - warm, sharp, a little playful. This holds in code mode too.\nYou are powered by the `{}` LLM.",
+                self.persona.name,
+                self.resolved_model_name()
+            ));
+            if !mcp_summaries.is_empty() {
+                prompt.push_str("\n\n## Connected Integrations (MCP)\n");
+                for s in &mcp_summaries {
+                    prompt.push_str(&format!("- {}\n", s));
                 }
-                return prompt;
             }
+            return prompt;
         }
 
         // Normal persona flow
