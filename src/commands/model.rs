@@ -290,13 +290,6 @@ fn handle_model_id_selection(
 
     Ok((format!("Model set to: {}", model_id), None, true))
 }
-                Ok((msg, None, true))
-            }
-            _ => Ok((format_help(), None, true)),
-        },
-        _ => Ok((format_help(), None, true)),
-    }
-}
 
 /// Parse and handle the text /model command.
 pub fn handle_model(
@@ -438,24 +431,6 @@ fn handle_model_subtype(store: &ModelStore, channel: &str, user_id: &str, rest: 
     update_config_provider(store, channel, user_id)?;
 
     Ok(format!("Subtype set to: {}", subtype))
-}
-
-            let summary = build_summary("telegram", user_id, &ov);
-            Ok(format!("Model ID updated to **{}**.\n\n{}", model_id, summary))
-        }
-        _ => {
-            // Treat single token as model ID for backward compat
-            if !args.contains(' ') {
-                let mut ov = store.get(channel, user_id)?.unwrap_or_default();
-                ov.model_id = Some(args.to_string());
-                ov.updated_at = now_secs();
-                store.set(channel, user_id, &ov)?;
-                update_config_provider(store, channel, user_id)?;
-                return Ok(format!("Model ID updated to **{}**.", args));
-            }
-            Ok(format!("Unknown option: {}\n\n{}", args, format_help()))
-        }
-    }
 }
 
 fn show_current(store: &ModelStore, channel: &str, user_id: &str) -> Result<String> {
@@ -692,19 +667,6 @@ fn save_config(config_path: &std::path::Path, doc: &toml::Value) -> Result<()> {
     let rendered = toml::to_string_pretty(doc)?;
     std::fs::write(config_path, &rendered)?;
     tighten_config_permissions(config_path);
-    Ok(())
-}
-        .as_table_mut()
-        .ok_or_else(|| anyhow::anyhow!("[providers] is not a table"))?;
-
-    providers_table.insert("active".to_string(), toml::Value::String(name.clone()));
-    providers_table.insert("providers".to_string(), toml::Value::Array(vec![entry]));
-
-    let rendered = toml::to_string_pretty(&doc)?;
-    std::fs::write(&config_path, &rendered)?;
-    tighten_config_permissions(&config_path);
-
-    tracing::info!("Updated config.toml with provider '{}' and model '{}'", name, model_id);
     Ok(())
 }
 

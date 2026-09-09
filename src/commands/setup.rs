@@ -662,7 +662,6 @@ fn print_setup_summary(
         println!("Set your API key: export OPENAI_API_KEY=your-key");
     }
 }
-}
 
 #[cfg(test)]
 mod tests {

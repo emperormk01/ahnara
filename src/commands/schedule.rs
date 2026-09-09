@@ -135,22 +135,6 @@ fn help_text() -> &'static str {
         /schedule disable <name>          - Disable a job\n\
         /schedule info <name>             - Show job details"
 }
-                None => format!("Job '{}' not found.", name),
-            }
-        }
-    }
-}
-
-fn help_text() -> &'static str {
-    "Usage: /schedule <command>\n\n\
-        Commands:\n\
-        /schedule list                     - List all jobs\n\
-        /schedule add <name> <cron> <prompt> - Add a job\n\
-        /schedule remove <name>           - Remove a job\n\
-        /schedule enable <name>           - Enable a job\n\
-        /schedule disable <name>          - Disable a job\n\
-        /schedule info <name>             - Show job details"
-}
 
 #[cfg(test)]
 mod tests {

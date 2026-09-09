@@ -21,81 +21,6 @@ impl AnthropicAdapter {
     pub fn new() -> Self {
         Self
     }
-}
-
-#[async_trait]
-impl ProviderAdapter for AnthropicAdapter {
-    fn provider_type(&self) -> &str {
-        "anthropic"
-    }
-
-    fn build_url(&self, api_base: &str, _api_key: &str, _model: &str) -> String {
-        let base = api_base.trim_end_matches('/');
-        format!("{}/messages", base)
-    }
-
-    fn build_headers(&self, api_key: &str) -> reqwest::header::HeaderMap {
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            "application/json".parse().unwrap(),
-        );
-        headers.insert("x-api-key", api_key.parse().unwrap());
-        headers.insert(
-            "anthropic-version",
-            "2023-06-01".parse().unwrap(),
-        );
-        headers
-    }
-
-    fn transform_request(&self, request: &CompletionRequest) -> serde_json::Value {
-        let mut system_content = String::new();
-        let mut messages: Vec<Value> = Vec::new();
-
-        for msg in &request.messages {
-            match msg.role.as_str() {
-                "system" => {
-                    self.append_system_content(&mut system_content, msg);
-                }
-                "user" => {
-                    messages.push(self.transform_user_message(msg));
-                }
-                "assistant" => {
-                    messages.push(self.transform_assistant_message(msg));
-                }
-                _ => {}
-            }
-        }
-
-        let mut body = serde_json::json!({
-            "model": request.model,
-            "max_tokens": request.max_tokens.unwrap_or(4096),
-            "messages": messages,
-        });
-
-        if !system_content.is_empty() {
-            body["system"] = serde_json::json!(system_content);
-        }
-
-        if let Some(temperature) = request.temperature {
-            body["temperature"] = serde_json::json!(temperature);
-        }
-
-        if let Some(tools) = &request.tools {
-            if !tools.is_empty() {
-                let anthropic_tools: Vec<Value> = tools.iter().map(|t| {
-                    serde_json::json!({
-                        "name": t.function.name,
-                        "description": t.function.description,
-                        "input_schema": t.function.parameters,
-                    })
-                }).collect();
-                body["tools"] = serde_json::json!(anthropic_tools);
-            }
-        }
-
-        body
-    }
 
     fn append_system_content(&self, system_content: &mut String, msg: &crate::providers::Message) {
         if let Some(ref c) = msg.content {
@@ -174,31 +99,122 @@ impl ProviderAdapter for AnthropicAdapter {
             })
         }
     }
-}
-            "model": request.model,
-            "system": system_content,
-            "messages": messages,
-            "max_tokens": request.max_tokens.unwrap_or(8192),
-        });
 
-        if let Some(temp) = request.temperature {
-            if temp > 0.0 {
-                body["temperature"] = serde_json::json!(temp);
+    async fn process_stream(stream: impl StreamExt<Item = Result<bytes::Bytes, reqwest::Error>>, tx: mpsc::Sender<StreamChunk>) {
+        let mut stream = stream;
+        while let Some(chunk) = stream.next().await {
+            if let Ok(bytes) = chunk {
+                let text = String::from_utf8_lossy(&bytes);
+                for line in text.lines() {
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        if data == "[DONE]" {
+                            let _ = tx.send(StreamChunk { id: None, choices: vec![], done: true }).await;
+                            return;
+                        }
+                        if let Ok(event) = serde_json::from_str::<Value>(data) {
+                            Self::process_stream_event(&event, &tx).await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    async fn process_stream_event(event: &Value, tx: &mpsc::Sender<StreamChunk>) {
+        if let Some(event_type) = event.get("type").and_then(|t| t.as_str()) {
+            match event_type {
+                "content_block_delta" => {
+                    if let Some(text_val) = event.get("delta").and_then(|d| d.get("text")).and_then(|t| t.as_str()) {
+                        let _ = tx.send(StreamChunk {
+                            id: None,
+                            choices: vec![crate::providers::StreamChoice {
+                                index: 0,
+                                delta: crate::providers::StreamDelta {
+                                    content: text_val.to_string(),
+                                    tool_calls: None,
+                                },
+                                finish_reason: None,
+                            }],
+                            done: false,
+                        }).await;
+                    }
+                }
+                "message_stop" => {
+                    let _ = tx.send(StreamChunk { id: None, choices: vec![], done: true }).await;
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl ProviderAdapter for AnthropicAdapter {
+    fn provider_type(&self) -> &str {
+        "anthropic"
+    }
+
+    fn build_url(&self, api_base: &str, _api_key: &str, _model: &str) -> String {
+        let base = api_base.trim_end_matches('/');
+        format!("{}/messages", base)
+    }
+
+    fn build_headers(&self, api_key: &str) -> reqwest::header::HeaderMap {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::CONTENT_TYPE,
+            "application/json".parse().unwrap(),
+        );
+        headers.insert("x-api-key", api_key.parse().unwrap());
+        headers.insert(
+            "anthropic-version",
+            "2023-06-01".parse().unwrap(),
+        );
+        headers
+    }
+
+    fn transform_request(&self, request: &CompletionRequest) -> serde_json::Value {
+        let mut system_content = String::new();
+        let mut messages: Vec<Value> = Vec::new();
+
+        for msg in &request.messages {
+            match msg.role.as_str() {
+                "system" => {
+                    self.append_system_content(&mut system_content, msg);
+                }
+                "user" => {
+                    messages.push(self.transform_user_message(msg));
+                }
+                "assistant" => {
+                    messages.push(self.transform_assistant_message(msg));
+                }
+                _ => {}
             }
         }
 
-        if let Some(ref tools) = request.tools {
+        let mut body = serde_json::json!({
+            "model": request.model,
+            "max_tokens": request.max_tokens.unwrap_or(4096),
+            "messages": messages,
+        });
+
+        if !system_content.is_empty() {
+            body["system"] = serde_json::json!(system_content);
+        }
+
+        if let Some(temperature) = request.temperature {
+            body["temperature"] = serde_json::json!(temperature);
+        }
+
+        if let Some(tools) = &request.tools {
             if !tools.is_empty() {
-                let anthropic_tools: Vec<Value> = tools
-                    .iter()
-                    .map(|t| {
-                        serde_json::json!({
-                            "name": t.function.name,
-                            "description": t.function.description,
-                            "input_schema": t.function.parameters,
-                        })
+                let anthropic_tools: Vec<Value> = tools.iter().map(|t| {
+                    serde_json::json!({
+                        "name": t.function.name,
+                        "description": t.function.description,
+                        "input_schema": t.function.parameters,
                     })
-                    .collect();
+                }).collect();
                 body["tools"] = serde_json::json!(anthropic_tools);
             }
         }
@@ -307,53 +323,5 @@ impl ProviderAdapter for AnthropicAdapter {
         });
 
         Ok(rx)
-    }
-
-    async fn process_stream(stream: impl StreamExt<Item = Result<bytes::Bytes, reqwest::Error>>, tx: mpsc::Sender<StreamChunk>) {
-        let mut stream = stream;
-        while let Some(chunk) = stream.next().await {
-            if let Ok(bytes) = chunk {
-                let text = String::from_utf8_lossy(&bytes);
-                for line in text.lines() {
-                    if let Some(data) = line.strip_prefix("data: ") {
-                        if data == "[DONE]" {
-                            let _ = tx.send(StreamChunk { id: None, choices: vec![], done: true }).await;
-                            return;
-                        }
-                        if let Ok(event) = serde_json::from_str::<Value>(data) {
-                            Self::process_stream_event(&event, &tx).await;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    async fn process_stream_event(event: &Value, tx: &mpsc::Sender<StreamChunk>) {
-        if let Some(event_type) = event.get("type").and_then(|t| t.as_str()) {
-            match event_type {
-                "content_block_delta" => {
-                    if let Some(text_val) = event.get("delta").and_then(|d| d.get("text")).and_then(|t| t.as_str()) {
-                        let _ = tx.send(StreamChunk {
-                            id: None,
-                            choices: vec![crate::providers::StreamChoice {
-                                index: 0,
-                                delta: crate::providers::StreamDelta {
-                                    content: text_val.to_string(),
-                                    tool_calls: None,
-                                },
-                                finish_reason: None,
-                            }],
-                            done: false,
-                        }).await;
-                    }
-                }
-                "message_stop" => {
-                    let _ = tx.send(StreamChunk { id: None, choices: vec![], done: true }).await;
-                }
-                _ => {}
-            }
-        }
-    }
     }
 }

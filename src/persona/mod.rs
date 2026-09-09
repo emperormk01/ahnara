@@ -366,8 +366,6 @@ impl SystemPromptBuilder {
         desc.push_str("- **Remember context** across our conversation\n\n");
         desc.push_str("Use these capabilities proactively. Don't ask permission - just do the work.\n");
     }
-        self
-    }
 
     fn format_tool_with_usage(&self, tool: &super::orchestrator::ToolDefinition) -> String {
         let mut formatted = format!(
