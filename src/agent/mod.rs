@@ -645,7 +645,7 @@ impl AgentCore {
                     tools_chars = tools_chars,
                     messages = messages.len(),
                     history_chars = history_chars,
-                    est_total_chars = system_prompt.len() + tools_chars + history_chars,
+                    est_total_chars = system_chars + tools_chars + history_chars,
                     "Request composition"
                 );
             }
