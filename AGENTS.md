@@ -37,6 +37,7 @@ When found, prefer rebuilding the orphaned arms as real handler functions over d
 - `SkillMeta` has no `version` field. It has `compatibility`. Check `skills/mod.rs` before touching metadata fields.
 - `ModelStore::new` creates dirs; anything writing under `~/.ahnara/` must `create_dir_all` first (`commands/model.rs:save_config` precedent). Tests run in parallel against real HOME: keep file side effects out of test bodies where possible.
 - Anthropic adapter must map the `tool` role to `tool_result` content blocks. Dropping tool messages breaks multi-turn tool conversations silently.
+- Google thought signatures: captured per tool call into `ToolCall.thought_signature` on parse (`apply_thought_signatures`), echoed as `extra_content.google.thought_signature` on later turns (`tool_calls_json`). Gemini 400s without the echo. Only Gemini-flavored paths emit it (native adapter always, OpenAI adapter when the model name starts with `gemini`); plain OpenAI servers never see the field. Never store signatures in history or logs beyond the debug preview.
 - Code-mode overrides are per-session (`HashMap` in `AgentCore`, hydrated from the `CodeModeStore` disk cache on miss). Never a global slot: one user's `/code` must not leak into another's session. The override path appends the identity block (name, Emperor M.K. credit, feminine voice), so she stays herself in code mode.
 - Normal mode does no coding: `/help`, `/code`, and `/normal` replies state the split (chat, ideas, advice, fun in normal; coding behind `/code`). Enforced by messaging, not heuristics.
 

@@ -286,6 +286,7 @@ impl ProviderAdapter for AnthropicAdapter {
                             name: name.clone(),
                             arguments: serde_json::to_string(input).unwrap_or_default(),
                         },
+                        thought_signature: None,
                     });
                 }
             }

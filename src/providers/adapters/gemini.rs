@@ -88,7 +88,7 @@ impl ProviderAdapter for GeminiAdapter {
                     "content": msg.content,
                 });
                 if let Some(ref tc) = msg.tool_calls {
-                    m["tool_calls"] = serde_json::to_value(tc).unwrap_or(serde_json::Value::Null);
+                    m["tool_calls"] = crate::providers::adapters::tool_calls_json(tc, true);
                 }
                 if let Some(ref id) = msg.tool_call_id {
                     m["tool_call_id"] = serde_json::json!(id);
@@ -166,9 +166,19 @@ impl ProviderAdapter for GeminiAdapter {
             })
             .unwrap_or_default();
 
+        let mut tool_calls = first.and_then(|c| c.message.tool_calls.clone());
+        // Capture Google thought signatures so follow-up turns can echo them.
+        if let Some(ref mut tcs) = tool_calls {
+            if let Ok(raw) = serde_json::from_str::<serde_json::Value>(body) {
+                if let Some(raw_msg) = raw.pointer("/choices/0/message") {
+                    crate::providers::adapters::apply_thought_signatures(tcs, raw_msg);
+                }
+            }
+        }
+
         Ok(CompletionResponse {
             content,
-            tool_calls: first.and_then(|c| c.message.tool_calls.clone()),
+            tool_calls,
             usage: completion.usage.map(|u| Usage {
                 prompt_tokens: u.prompt_tokens,
                 completion_tokens: u.completion_tokens,

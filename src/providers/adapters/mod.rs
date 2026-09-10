@@ -78,3 +78,46 @@ impl AdapterRegistry {
         })
     }
 }
+
+use crate::providers::ToolCall;
+
+/// Serialize assistant tool calls for the request body. When `google_style`
+/// is set, calls carrying a thought signature get the
+/// `extra_content.google.thought_signature` wrapper Gemini requires on
+/// follow-up turns. Other providers never see the field.
+pub fn tool_calls_json(calls: &[ToolCall], google_style: bool) -> serde_json::Value {
+    let arr: Vec<serde_json::Value> = calls
+        .iter()
+        .map(|tc| {
+            let mut v = serde_json::to_value(tc).unwrap_or(serde_json::Value::Null);
+            if google_style {
+                if let Some(ref sig) = tc.thought_signature {
+                    v["extra_content"] = serde_json::json!({"google": {"thought_signature": sig}});
+                }
+            }
+            v
+        })
+        .collect();
+    serde_json::Value::Array(arr)
+}
+
+/// Pull Google thought signatures out of a raw response message into the
+/// parsed tool calls, matched by id. No-op when absent.
+pub fn apply_thought_signatures(calls: &mut [ToolCall], raw_message: &serde_json::Value) {
+    let Some(raw_calls) = raw_message.get("tool_calls").and_then(|v| v.as_array()) else {
+        return;
+    };
+    for tc in calls.iter_mut() {
+        if tc.thought_signature.is_some() {
+            continue;
+        }
+        if let Some(sig) = raw_calls
+            .iter()
+            .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(tc.id.as_str()))
+            .and_then(|r| r.pointer("/extra_content/google/thought_signature"))
+            .and_then(|v| v.as_str())
+        {
+            tc.thought_signature = Some(sig.to_string());
+        }
+    }
+}

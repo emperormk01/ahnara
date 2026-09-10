@@ -678,6 +678,11 @@ pub struct ToolCall {
     #[serde(rename = "type")]
     pub call_type: String,
     pub function: FunctionCall,
+    /// Google thought signature, echoed back on later turns to keep
+    /// Gemini function calling working. Absent for other providers and
+    /// never serialized when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thought_signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -101,6 +101,7 @@ mod tests {
                             name: "web_search".into(),
                             arguments: r#"{"query":"rust"}"#.into(),
                         },
+                        thought_signature: None,
                     }]),
                     tool_call_id: None,
                     name: None,
@@ -274,5 +275,52 @@ mod tests {
         assert_eq!(at.len(), 2);
         assert!(at[0].get("cache_control").is_none());
         assert_eq!(at[1]["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn thought_signature_captured_and_echoed() {
+        let a = OpenAIAdapter::new();
+        let body = serde_json::json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "calc", "arguments": "{}"},
+                        "extra_content": {"google": {"thought_signature": "sig-abc"}},
+                    }],
+                },
+            }],
+        });
+        let r = a.parse_response(&body.to_string()).unwrap();
+        let tcs = r.tool_calls.unwrap();
+        assert_eq!(tcs[0].thought_signature.as_deref(), Some("sig-abc"));
+
+        // Echoed for gemini-flavored models, omitted otherwise.
+        let mut req = make_request(
+            vec![Message {
+                role: "assistant".into(),
+                content: None,
+                tool_calls: Some(tcs.clone()),
+                tool_call_id: None,
+                name: None,
+                content_parts: None,
+            }],
+            None,
+        );
+        req.model = "gemini-3.5-flash-lite".into();
+        let out = a.transform_request(&req);
+        let sent = out["messages"][0]["tool_calls"].as_array().unwrap();
+        assert_eq!(
+            sent[0]["extra_content"]["google"]["thought_signature"],
+            "sig-abc"
+        );
+
+        req.model = "gpt-4o".into();
+        let out = a.transform_request(&req);
+        let sent = out["messages"][0]["tool_calls"].as_array().unwrap();
+        assert!(sent[0].get("extra_content").is_none());
     }
 }
