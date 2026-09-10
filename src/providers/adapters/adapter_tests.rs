@@ -312,7 +312,9 @@ mod tests {
         );
         req.model = "gemini-3.5-flash-lite".into();
         let out = a.transform_request(&req);
-        let sent = out["messages"][0]["tool_calls"].as_array().unwrap();
+        let msgs = out["messages"].as_array().unwrap();
+        let sent_msg = msgs.iter().find(|m| m["role"] == "assistant").unwrap();
+        let sent = sent_msg["tool_calls"].as_array().unwrap();
         assert_eq!(
             sent[0]["extra_content"]["google"]["thought_signature"],
             "sig-abc"
@@ -320,7 +322,9 @@ mod tests {
 
         req.model = "gpt-4o".into();
         let out = a.transform_request(&req);
-        let sent = out["messages"][0]["tool_calls"].as_array().unwrap();
+        let msgs = out["messages"].as_array().unwrap();
+        let sent_msg = msgs.iter().find(|m| m["role"] == "assistant").unwrap();
+        let sent = sent_msg["tool_calls"].as_array().unwrap();
         assert!(sent[0].get("extra_content").is_none());
     }
 }
