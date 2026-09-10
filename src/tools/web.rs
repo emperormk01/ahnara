@@ -55,60 +55,80 @@ impl Tool for WebSearchTool {
         let engines = args.get("engines")
             .and_then(|v| v.as_str());
         
-        // Auto-install webserp if missing
-        let has_webserp = Command::new("which")
-            .arg("webserp")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-        
-        if !has_webserp {
+        // Resolve the webserp binary: PATH lookup plus known install
+        // locations (persistent volumes, user base). If nothing runs,
+        // fall through to the DDG-lite fallback instead of erroring.
+        let webserp_bin = find_webserp().or_else(|| {
             tracing::info!("webserp not found, auto-installing via pip...");
-            let install = Command::new("pip")
-                .args(["install", "webserp"])
-                .output();
+            let install = Command::new("pip").args(["install", "webserp"]).output();
             match install {
                 Ok(o) if o.status.success() => {
                     tracing::info!("webserp installed successfully");
                 }
                 Ok(o) => {
-                    let stderr = String::from_utf8_lossy(&o.stderr);
-                    return Ok(ToolResult {
-                        tool_name: "web_search".into(),
-                        success: false,
-                        output: serde_json::json!({
-                            "error": format!("Failed to install webserp: {}", stderr.trim()),
-                            "fix": "Run manually: pip install webserp"
-                        }),
-                        error: Some(stderr.trim().to_string()),
-                        duration_ms: 0,
-                    });
+                    tracing::warn!(
+                        "webserp install failed: {}",
+                        String::from_utf8_lossy(&o.stderr).trim()
+                    );
                 }
                 Err(e) => {
-                    return Ok(ToolResult {
-                        tool_name: "web_search".into(),
-                        success: false,
-                        output: serde_json::json!({
-                            "error": format!("pip not available: {}", e),
-                            "fix": "Install pip, then run: pip install webserp"
-                        }),
-                        error: Some(e.to_string()),
-                        duration_ms: 0,
-                    });
+                    tracing::warn!("pip not available: {}", e);
                 }
             }
-        }
+            find_webserp()
+        });
+
+        let bin = match webserp_bin {
+            Some(b) => b,
+            None => {
+                tracing::info!("no webserp binary, using ddg-lite fallback directly");
+                let fb = ddg_lite_search(query, max_results).await.unwrap_or_default();
+                return Ok(ToolResult {
+                    tool_name: "web_search".into(),
+                    success: !fb.is_empty(),
+                    output: serde_json::json!({
+                        "query": query,
+                        "provider": "ddg-lite-fallback",
+                        "total": fb.len(),
+                        "results": fb
+                    }),
+                    error: if fb.is_empty() {
+                        Some("no search backend available".to_string())
+                    } else {
+                        None
+                    },
+                    duration_ms: 0,
+                });
+            }
+        };
         
         // Build command
-        let mut cmd = Command::new("webserp");
+        let mut cmd = Command::new(&bin);
         cmd.arg(query);
         cmd.arg("--max-results").arg(max_results.to_string());
         if let Some(eng) = engines {
             cmd.arg("--engines").arg(eng);
         }
         
-        let output = cmd.output()
-            .map_err(|e| anyhow!("Failed to run webserp: {}", e))?;
+        let output = match cmd.output() {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::warn!("webserp run failed ({}), ddg-lite fallback", e);
+                let fb = ddg_lite_search(query, max_results).await.unwrap_or_default();
+                return Ok(ToolResult {
+                    tool_name: "web_search".into(),
+                    success: !fb.is_empty(),
+                    output: serde_json::json!({
+                        "query": query,
+                        "provider": "ddg-lite-fallback",
+                        "total": fb.len(),
+                        "results": fb
+                    }),
+                    error: None,
+                    duration_ms: 0,
+                });
+            }
+        };
         
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -175,6 +195,35 @@ impl Tool for WebSearchTool {
             duration_ms: 0,
         })
     }
+}
+
+/// Locate a runnable webserp binary: PATH first, then known install
+/// locations (persistent volumes and user-base bins that PATH may miss).
+fn find_webserp() -> Option<String> {
+    if Command::new("which")
+        .arg("webserp")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return Some("webserp".to_string());
+    }
+    let mut candidates = vec![
+        "/data/system/usr/local/bin/webserp".to_string(),
+        "/usr/local/bin/webserp".to_string(),
+    ];
+    if let Ok(home) = std::env::var("HOME") {
+        candidates.push(format!("{}/.local/bin/webserp", home));
+        candidates.push(format!("{}/.python/bin/webserp", home));
+    }
+    candidates.into_iter().find(|p| {
+        std::path::Path::new(p).is_file()
+            && Command::new(p)
+                .arg("--version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+    })
 }
 
 /// Direct DuckDuckGo Lite search (no JS, no key). Backup for when webserp's
