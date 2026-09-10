@@ -141,13 +141,32 @@ impl Tool for WebSearchTool {
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
+
+        // DDG-lite fallback: webserp's engines serve bot-tier empty pages to
+        // datacenter IPs (Google JS-shell, DDG/Yahoo/Startpage no-result shells;
+        // only Brave currently parses). lite.duckduckgo.com still serves real
+        // results, so an empty webserp response triggers one direct fetch here.
+        let (provider, results) = if results.is_empty() {
+            match ddg_lite_search(query, max_results).await {
+                Ok(fb) if !fb.is_empty() => {
+                    tracing::info!(
+                        "webserp empty, ddg-lite fallback returned {} results",
+                        fb.len()
+                    );
+                    ("ddg-lite-fallback", fb)
+                }
+                _ => ("webserp", results),
+            }
+        } else {
+            ("webserp", results)
+        };
         
         Ok(ToolResult {
             tool_name: "web_search".into(),
             success: true,
             output: serde_json::json!({
                 "query": query,
-                "provider": "webserp",
+                "provider": provider,
                 "total": results.len(),
                 "unresponsive_engines": unresponsive,
                 "results": results
@@ -156,6 +175,112 @@ impl Tool for WebSearchTool {
             duration_ms: 0,
         })
     }
+}
+
+/// Direct DuckDuckGo Lite search (no JS, no key). Backup for when webserp's
+/// scraped engines return empty pages.
+async fn ddg_lite_search(query: &str, max_results: u64) -> Result<Vec<serde_json::Value>> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0")
+        .timeout(std::time::Duration::from_secs(20))
+        .build()?;
+    let html = client
+        .get("https://lite.duckduckgo.com/lite/")
+        .query(&[("q", query)])
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    Ok(parse_ddg_lite(&html, max_results as usize))
+}
+
+/// Parse DDG-lite HTML: `a.result-link` anchors (href carries `uddg=<pct-url>`)
+/// each followed by a `td.result-snippet` cell. Pure regex, no HTML dep.
+fn parse_ddg_lite(html: &str, max_results: usize) -> Vec<serde_json::Value> {
+    let link_re =
+        regex::Regex::new(r#"(?s)<a\b[^>]*class='result-link'[^>]*>(.*?)</a>"#).unwrap();
+    let href_re = regex::Regex::new(r#"href="([^"]+)""#).unwrap();
+    let snip_re =
+        regex::Regex::new(r#"(?s)<td class='result-snippet'>(.*?)</td>"#).unwrap();
+    let tag_re = regex::Regex::new(r#"<[^>]+>"#).unwrap();
+
+    let links: Vec<(String, String)> = link_re
+        .captures_iter(html)
+        .filter_map(|c| {
+            let anchor = c.get(0)?.as_str();
+            let title = tag_re.replace_all(&c[1], "").trim().to_string();
+            let href = href_re.captures(anchor)?.get(1)?.as_str().to_string();
+            let url = lite_result_url(&href)?;
+            if title.is_empty() {
+                return None;
+            }
+            Some((title, url))
+        })
+        .collect();
+    let snippets: Vec<String> = snip_re
+        .captures_iter(html)
+        .map(|c| {
+            tag_re
+                .replace_all(&c[1], "")
+                .replace("&nbsp;", " ")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+
+    links
+        .into_iter()
+        .zip(snippets.into_iter().chain(std::iter::repeat(String::new())))
+        .take(max_results)
+        .map(|((title, url), snippet)| {
+            serde_json::json!({
+                "title": title,
+                "url": url,
+                "content": snippet,
+                "engine": "duckduckgo-lite"
+            })
+        })
+        .collect()
+}
+
+/// Extract the real URL from a DDG-lite redirect href (`uddg=<pct-encoded>`).
+fn lite_result_url(href: &str) -> Option<String> {
+    let start = href.find("uddg=")? + 5;
+    let end = href[start..].find('&').map(|i| start + i).unwrap_or(href.len());
+    let decoded = percent_decode(&href[start..end]);
+    if decoded.starts_with("http") {
+        Some(decoded)
+    } else {
+        None
+    }
+}
+
+/// Minimal percent-decoder (no extra dep for one query param).
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (
+                (bytes.get(i + 1)).and_then(|b| (*b as char).to_digit(16)),
+                (bytes.get(i + 2)).and_then(|b| (*b as char).to_digit(16)),
+            ) {
+                out.push((h * 16 + l) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        if bytes[i] == b'+' {
+            out.push(b' ');
+        } else {
+            out.push(bytes[i]);
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 // =====================================================
@@ -669,5 +794,50 @@ impl Tool for WebFetchTool {
             error: None,
             duration_ms,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LITE_SAMPLE: &str = r#"
+        <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fasync%2F&amp;rut=abc" class='result-link'>Async <b>Rust</b> Guide</a>
+        <td class='result-snippet'>Learn <b>async</b> programming in Rust fast.</td>
+        <a rel="nofollow" href="//duckduckgo.com/about.html" class='result-link'>About</a>
+    "#;
+
+    #[test]
+    fn lite_parser_extracts_title_url_snippet() {
+        let out = parse_ddg_lite(LITE_SAMPLE, 10);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["title"], "Async Rust Guide");
+        assert_eq!(out[0]["url"], "https://example.com/async/");
+        assert_eq!(out[0]["content"], "Learn async programming in Rust fast.");
+        assert_eq!(out[0]["engine"], "duckduckgo-lite");
+    }
+
+    #[test]
+    fn lite_parser_respects_max_results() {
+        assert!(parse_ddg_lite(LITE_SAMPLE, 0).is_empty());
+    }
+
+    #[test]
+    fn percent_decode_handles_escapes() {
+        assert_eq!(
+            percent_decode("https%3A%2F%2Fexample.com%2Fa+b"),
+            "https://example.com/a b"
+        );
+        assert_eq!(percent_decode("plain"), "plain");
+        assert_eq!(percent_decode("trailing%"), "trailing%");
+    }
+
+    #[test]
+    fn lite_result_url_rejects_non_http() {
+        assert!(lite_result_url("//duckduckgo.com/about.html").is_none());
+        assert_eq!(
+            lite_result_url("//duckduckgo.com/l/?uddg=https%3A%2F%2Fx.com%2F&rut=1").as_deref(),
+            Some("https://x.com/")
+        );
     }
 }
