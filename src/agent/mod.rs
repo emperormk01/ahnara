@@ -904,7 +904,7 @@ impl AgentCore {
                 "Truncated tool output to budget"
             );
             result_str = format!(
-                "{}... [truncated to {} chars by output budget}",
+                "{}... [truncated to {} chars by output budget]",
                 &result_str[..result_str.floor_char_boundary(cap)],
                 cap
             );
