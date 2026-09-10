@@ -16,10 +16,10 @@ Key architectural choices include:
 
 - **Rust native** -- zero-cost abstractions, no GC pauses
 - **DAG tool execution** -- independent tools run in parallel
-- **3-tier memory** -- LRU cache + SQLite + vector search
-- **Multi-provider** -- NVIDIA, OpenAI, Anthropic, OpenRouter, Groq, and more
+- **Versioned memory** -- LRU cache + SQLite (sessions, reflections, versioned facts, FTS5 search)
+- **Multi-provider** -- NVIDIA, Poolside, Gemini, OpenAI, Anthropic, and any OpenAI-compatible endpoint
 - **Skill system** -- compatible with [agentskills.io](https://agentskills.io)
-- **Zero-copy streaming** -- direct SSE passthrough for real-time responses
+- **Streaming responses** -- direct SSE passthrough for real-time responses
 - **Multi-channel** -- Telegram, Discord, and HTTP API with optional bearer auth
 - **MCP client** -- connect to stdio MCP servers and use their tools
 - **Planner DAG** -- structured task planning with auditable run database
@@ -27,7 +27,7 @@ Key architectural choices include:
 - **Cron scheduler** -- autonomous recurring jobs inside the gateway
 - **Context pruning** -- smart conversation history management
 - **Persona system** -- customizable agent personality and behavior
-- **Code mode** -- isolated coding agent with its own workspace
+- **Code mode** -- isolated coding agent with its own workspace (`/code`), normal chat stays code-free (`/normal`)
 
 ---
 
@@ -37,7 +37,7 @@ ahnara operates on a core mental model where the agent:
 
 **Planning and execution.** The agent uses a structured DAG (Directed Acyclic Graph) to plan tasks, breaking down goals into actionable steps. It executes tools in parallel when possible to maximize efficiency.
 
-**Memory and context.** The agent remembers context across sessions using a 3-tier memory system: a fast LRU cache for recent data, SQLite for persistent storage, and vector search for semantic retrieval.
+**Memory and context.** The agent remembers context across sessions using LRU cache plus SQLite persistence (sessions, reflections, observations, user preferences, compaction summaries, and versioned facts with full-text search). Stored facts carry versions and verification timestamps, so stale memory gets flagged instead of silently trusted.
 
 **Adaptation and behavior.** The agent adapts its behavior through persona and skill configurations, allowing it to customize its personality and capabilities for different tasks.
 
@@ -64,9 +64,14 @@ ahnara works with any OpenAI-compatible endpoint. Pick one:
 export NVIDIA_API_KEY="nvapi-..."
 ```
 
-**OpenRouter (any model, pay-per-token):**
+**Poolside (open weights inference):**
 ```bash
-export OPENROUTER_API_KEY="sk-or-v1-..."
+export POOLSIDE_API_KEY="sky_..."
+```
+
+**Google Gemini (OpenAI-compatible endpoint):**
+```bash
+export GEMINI_API_KEY="..."
 ```
 
 **Any custom endpoint:**
@@ -119,10 +124,10 @@ Create a bot via [@BotFather](https://t.me/BotFather), paste the token, restart 
 
 - **Rust native** -- zero-cost abstractions, no GC pauses
 - **DAG tool execution** -- independent tools run in parallel
-- **3-tier memory** -- LRU cache + SQLite + vector search
-- **Multi-provider** -- NVIDIA, OpenAI, Anthropic, OpenRouter, Groq, and more
+- **Versioned memory** -- LRU cache + SQLite (sessions, reflections, versioned facts, FTS5 search)
+- **Multi-provider** -- NVIDIA, Poolside, Gemini, OpenAI, Anthropic, and any OpenAI-compatible endpoint
 - **Skill system** -- compatible with [agentskills.io](https://agentskills.io)
-- **Zero-copy streaming** -- direct SSE passthrough for real-time responses
+- **Streaming responses** -- direct SSE passthrough for real-time responses
 - **Multi-channel** -- Telegram, Discord, and HTTP API with optional bearer auth
 - **MCP client** -- connect to stdio MCP servers and use their tools
 - **Planner DAG** -- structured task planning with auditable run database
@@ -213,6 +218,25 @@ ahnara gateway --port 8080
 
 ---
 
+## Web Search
+
+`web_search` needs no API key. It scrapes multiple engines in parallel (Brave, DuckDuckGo, Google, Yahoo, Startpage, and more) and falls back to a built-in DuckDuckGo-Lite fetch when engines serve bot-blocked empty pages.
+
+```bash
+# In chat: she searches automatically for current info, prices, news.
+/memory  # view stored facts (versioned, with verification age)
+```
+
+Companion project: [Seekuo](https://github.com/emperormk01/Seekuo) — a standalone agent-friendly search toolbox (TLS-impersonated fetching, HTML-to-Markdown, freshness controls, structured agent JSON).
+
+---
+
+## Memory
+
+SQLite-backed and versioned. Every stored fact carries a version, source, and verification timestamp; changed values archive the old row instead of overwriting silently. Stale facts get flagged `RE-VERIFY` in the prompt, and deploy-shaped commands trigger a freshness check before running.
+
+---
+
 ## Configuration
 
 Config file: `file ~/.ahnara/config.toml`
@@ -220,7 +244,7 @@ Config file: `file ~/.ahnara/config.toml`
 ```toml
 [agent]
 name = "ahnara"
-default_model = "stepfun-ai/step-3.5-flash"
+default_model = "gemini-3.5-flash-lite"
 temperature = 1.0
 max_tokens = 8192
 recent_history_turns = 10
@@ -231,6 +255,10 @@ tool_output_max_chars = 4000
 name = "nvidia"
 api_base = "https://integrate.api.nvidia.com/v1"
 # api_key via NVIDIA_API_KEY env var
+
+[providers.fallbacks]
+# poolside, gemini, openai-compatible endpoints
+```
 
 [memory]
 database_path = "~/.ahnara/memory.db"
@@ -253,10 +281,10 @@ port = 18789
 | Variable | Description |
 | --- | --- |
 | `NVIDIA_API_KEY` | NVIDIA API key |
+| `POOLSIDE_API_KEY` | Poolside API key |
+| `GEMINI_API_KEY` | Google Gemini API key |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
-| `OPENROUTER_API_KEY` | OpenRouter API key |
-| `GROQ_API_KEY` | Groq API key |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `DISCORD_BOT_TOKEN` | Discord bot token |
 | `ahnara_REQUIRE_AUTH` | Require bearer auth on API routes |
@@ -295,7 +323,7 @@ timeout_secs = 30
 
 ## Skills Hub / Taps
 
-Merge skills from multiple registry manifests. The official Auxlo registry is enabled by default.
+Merge skills from multiple registry manifests.
 
 ```bash
 ahnara skill tap list
@@ -408,7 +436,7 @@ Instructions for the AI agent...
 │  │ ┌─────────┐ │  │ ┌─────────┐ │  │ ┌─────────┐ │    │
 │  │ │ Primary │ │  │ │   LRU   │ │  │ │ Tools   │ │    │
 │  │ │Fallbacks│ │  │ │ SQLite  │ │  │ │ (para.) │ │    │
-│  │ └─────────┘ │  │ │ Vector  │ │  │ └─────────┘ │    │
+│  │ └─────────┘ │  │ │ + FTS5  │ │  │ └─────────┘ │    │
 │  └─────────────┘ │ └─────────┘ │  └─────────────┘    │
 │                   └─────────────┘                      │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
@@ -424,28 +452,24 @@ Instructions for the AI agent...
 
 | Metric | Value |
 | --- | --- |
-| Binary Size | \~21 MB |
-| Startup Time | \~12ms |
-| Chat Latency | &lt;100ms |
-| First Stream Token | &lt;200ms |
-| Tests | 71 passing |
-| Lines of Rust | \~17,700 |
+| Binary Size | ~31 MB (static musl) |
+| Startup Time | ~12ms |
+| Tests | 181 passing |
+| Lines of Rust | ~31,500 |
 
 ---
 
 ## Roadmap
 
-- [ ] More MCP server integrations (filesystem, Brave search, memory, fetch, postgres)
+- [x] Provider-specific request adapters (Anthropic, Gemini native formats)
+- [x] Rate limiting and retry with exponential backoff
+- [x] Multi-user / multi-session support
 
-- [ ] Provider-specific request adapters (Anthropic, Gemini, Cohere native formats)
-
-- [ ] Rate limiting and retry with exponential backoff
+- [ ] More MCP server integrations (filesystem, memory, fetch, postgres)
 
 - [ ] Streaming partial tool call reassembly
 
 - [ ] Accurate token counting (tiktoken-rs integration)
-
-- [ ] Multi-user / multi-session support
 
 - [ ] Web UI dashboard
 
@@ -458,10 +482,6 @@ Instructions for the AI agent...
 ---
 
 ## Troubleshooting
-
-### "System message must be at the beginning" (after upgrade to v0.4.7)
-
-Fixed in v0.4.7. This occurred when conversation compaction inserted a mid-conversation system message that some providers reject. Run `/update` to get the fix.
 
 ### API key not found
 
