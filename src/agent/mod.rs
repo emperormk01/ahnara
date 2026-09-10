@@ -904,11 +904,68 @@ impl AgentCore {
                 "Truncated tool output to budget"
             );
             result_str = format!(
-                "{}... [truncated to {} chars by output budget]",
+                "{}... [truncated to {} chars by output budget}",
                 &result_str[..result_str.floor_char_boundary(cap)],
                 cap
             );
         }
+
+        // Verify-before-deploy: a deploy-shaped command runs against live
+        // infrastructure, so stale memory must not ride along silently. When
+        // stored facts are past their freshness threshold, name them at the
+        // top of the result so the model re-checks before trusting them.
+        if let Some(warning) = self.deploy_freshness_warning(&tool_call.function.name, &args) {
+            result_str = format!("{}\n\n{}", warning, result_str);
+        }
+        result_str
+    }
+
+    /// Return a stale-memory warning when a high-stakes (deploy-shaped) tool
+    /// call meets unverified facts. `None` means proceed normally.
+    fn deploy_freshness_warning(
+        &self,
+        tool_name: &str,
+        args: &serde_json::Value,
+    ) -> Option<String> {
+        const DEPLOY_TOOLS: &[&str] = &["run_bash_command", "run_shell", "shell"];
+        const DEPLOY_PATTERNS: &[&str] = &[
+            "deploy",
+            "publish",
+            "release",
+            "wrangler",
+            "terraform apply",
+            "git push",
+        ];
+        if !DEPLOY_TOOLS.contains(&tool_name) {
+            return None;
+        }
+        let haystack = args.to_string().to_lowercase();
+        if !DEPLOY_PATTERNS.iter().any(|p| haystack.contains(p)) {
+            return None;
+        }
+        let ms = self.memory_store.as_ref()?;
+        let stale = ms
+            .stale_facts(crate::memory::context::FACT_STALE_AFTER_SECS)
+            .ok()?;
+        if stale.is_empty() {
+            return None;
+        }
+        let keys: Vec<String> = stale.iter().take(5).map(|f| f.key.clone()).collect();
+        tracing::warn!(
+            "Deploy-shaped tool '{}' with {} stale fact(s): {}",
+            tool_name,
+            stale.len(),
+            keys.join(", ")
+        );
+        Some(format!(
+            "[MEMORY FRESHNESS WARNING] {} stored fact(s) are past verification ({}). \
+             Re-check these against the live source before trusting them for this deployment: {}. \
+             If a value changed, store the corrected fact so memory updates.",
+            stale.len(),
+            "7d",
+            keys.join(", ")
+        ))
+    }
         result_str
     }
 

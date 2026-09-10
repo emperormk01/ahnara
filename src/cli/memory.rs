@@ -95,11 +95,12 @@ fn handle_facts(store: &MemoryStore) -> Result<()> {
     }
     for f in &facts {
         println!(
-            "{}: {} (source: {}, confidence: {:.0}%)",
+            "{}: {} (source: {}, confidence: {:.0}%, v{})",
             f.key,
             f.value,
             f.source.as_deref().unwrap_or("unknown"),
-            f.confidence * 100.0
+            f.confidence * 100.0,
+            f.version,
         );
     }
     Ok(())
@@ -145,7 +146,7 @@ fn handle_search(store: &MemoryStore, query: &str, limit: usize) -> Result<()> {
     if !results.facts.is_empty() {
         println!("== Facts ({})", results.facts.len());
         for f in &results.facts {
-            println!("  {}: {}", f.key, f.value);
+            println!("  {}: {} [v{}]", f.key, f.value, f.version);
         }
     }
     if !results.summaries.is_empty() {

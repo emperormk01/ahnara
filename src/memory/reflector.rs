@@ -100,7 +100,7 @@ Fields:
 - approachThatFailed: the strategy that backfired -- something you should never repeat
 - behavioralNote: if the user corrected you, got frustrated, or pushed back, what you need to do differently
 - evidence: the specific conversation moments that support your recollection
-- facts: array of {key, value} objects for any concrete facts worth remembering (e.g. API endpoints, config values, names, preferences). Empty array if none.
+- facts: array of {key, value} objects for any concrete facts worth remembering (e.g. API endpoints, config values, names, preferences). Empty array if none. If the conversation changed something already listed under STORED FACTS below, emit the NEW value under the SAME key -- the store keeps the old value as versioned history automatically, so never invent a renamed key to avoid the conflict.
 - observations: array of strings for notable things observed about the user, their environment, or their work patterns. Empty array if none.
 - preferences: array of {category, preference, confidence} objects for user preferences you detected (confidence 0.0-1.0). Empty array if none.
 
@@ -201,10 +201,28 @@ impl Reflector {
             return Ok(None);
         }
 
-        let prompt = self.build_reflection_prompt(&session.messages);
+        let mut prompt = self.build_reflection_prompt(&session.messages);
         if prompt.trim().is_empty() {
             self.mark_reflected(&session.session_id);
             return Ok(None);
+        }
+        // Contradiction awareness: show the model what is already stored so
+        // changed values reuse the same key (versioned supersede) instead of
+        // forking into a contradictory duplicate.
+        if let Some(ref store) = self.store {
+            if let Ok(facts) = store.list_facts() {
+                if !facts.is_empty() {
+                    let known: Vec<String> = facts
+                        .iter()
+                        .take(30)
+                        .map(|f| format!("{} = {} (v{})", f.key, f.value, f.version))
+                        .collect();
+                    prompt.push_str(&format!(
+                        "\nSTORED FACTS (reuse the same key when a value changed):\n{}\n",
+                        known.join("\n")
+                    ));
+                }
+            }
         }
 
         let reflection = self.get_reflection_with_retry(&prompt, &session.session_id, session.messages.len()).await?;
@@ -593,6 +611,18 @@ impl Reflector {
             let value = fact["value"].as_str().unwrap_or_default();
             if key.is_empty() || value.is_empty() {
                 continue;
+            }
+            // Detect supersedes so value changes are visible, not silent.
+            if let Ok(Some(existing)) = store.get_fact(key) {
+                if existing.value != value {
+                    tracing::info!(
+                        "Fact superseded: '{}' v{} '{}' -> '{}'",
+                        key,
+                        existing.version,
+                        existing.value,
+                        value
+                    );
+                }
             }
             if let Err(e) = store.set_fact(key, value, Some("reflection")) {
                 tracing::warn!("Failed to store extracted fact '{}': {}", key, e);

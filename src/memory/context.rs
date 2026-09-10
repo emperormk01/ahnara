@@ -15,6 +15,9 @@ pub struct ContextIndex {
     store: Arc<MemoryStore>,
 }
 
+/// A fact older than this without re-verification is flagged RE-VERIFY.
+pub const FACT_STALE_AFTER_SECS: u64 = 7 * 24 * 3600;
+
 impl ContextIndex {
     pub fn new(store: Arc<MemoryStore>) -> Self {
         Self { store }
@@ -108,9 +111,29 @@ impl ContextIndex {
     }
 
     fn format_facts(facts: &[FactRecord]) -> String {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         let mut out = String::from("## Known Facts\n");
         for f in facts {
-            out.push_str(&format!("- {}: {}\n", f.key, f.value));
+            let age = f
+                .verified_at
+                .map(|v| format_age(now.saturating_sub(v)))
+                .unwrap_or_else(|| "never verified".to_string());
+            let stale = match f.verified_at {
+                Some(v) => now.saturating_sub(v) > FACT_STALE_AFTER_SECS,
+                None => true,
+            };
+            out.push_str(&format!(
+                "- {}: {} [v{}, {}, src: {}{}]\n",
+                f.key,
+                f.value,
+                f.version,
+                age,
+                f.source.as_deref().unwrap_or("unknown"),
+                if stale { " RE-VERIFY" } else { "" },
+            ));
         }
         out
     }
@@ -122,6 +145,22 @@ impl ContextIndex {
             out.push_str(&format!("- {}: {}\n", o.title, o.narrative));
         }
         out
+    }
+}
+
+/// Human age for a verification timestamp delta ("3h ago", "2d ago").
+fn format_age(secs: u64) -> String {
+    const MIN: u64 = 60;
+    const HOUR: u64 = 3600;
+    const DAY: u64 = 86400;
+    if secs < MIN {
+        "just verified".to_string()
+    } else if secs < HOUR {
+        format!("{}m ago", secs / MIN)
+    } else if secs < DAY {
+        format!("{}h ago", secs / HOUR)
+    } else {
+        format!("{}d ago", secs / DAY)
     }
 }
 
@@ -149,6 +188,7 @@ mod tests {
         assert!(result.contains("[CROSS-SESSION MEMORY]"));
         assert!(result.contains("Known Facts"));
         assert!(result.contains("ahnara"));
+        assert!(result.contains("[v1"));
         assert!(result.contains("[END MEMORY]"));
     }
 
