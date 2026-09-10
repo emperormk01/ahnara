@@ -966,8 +966,6 @@ impl AgentCore {
             keys.join(", ")
         ))
     }
-        result_str
-    }
 
     fn append_reflections(&self, system_prompt: &mut String, reflections: &[super::memory::reflector::Reflection]) {
         if reflections.is_empty() {
