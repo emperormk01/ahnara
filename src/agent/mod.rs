@@ -876,6 +876,9 @@ impl AgentCore {
         );
 
         // Execute via orchestrator
+        // (Freshness pre-check first: `args` moves into the call below.)
+        let freshness_warning =
+            self.deploy_freshness_warning(&tool_call.function.name, &args);
         let result = self
             .orchestrator
             .execute_tool(&tool_call.function.name, args)
@@ -914,7 +917,7 @@ impl AgentCore {
         // infrastructure, so stale memory must not ride along silently. When
         // stored facts are past their freshness threshold, name them at the
         // top of the result so the model re-checks before trusting them.
-        if let Some(warning) = self.deploy_freshness_warning(&tool_call.function.name, &args) {
+        if let Some(warning) = freshness_warning {
             result_str = format!("{}\n\n{}", warning, result_str);
         }
         result_str
