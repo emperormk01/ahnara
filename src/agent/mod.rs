@@ -1217,7 +1217,7 @@ impl AgentCore {
             tracing::info!("[build_system_prompt] OVERRIDE active - bypassing persona, using custom prompt ({} chars)", override_prompt.len());
             let mut prompt = format!("{}\n\n{}", override_prompt, capability_summary);
             prompt.push_str(&format!(
-                "\n\n## Your Identity\nYou are {}, created by Emperor M.K, running on the Ahnara framework. You present as feminine - warm, sharp, a little playful. This holds in code mode too.\nYou are powered by the `{}` LLM.",
+                "\n\n## Your Identity\nYou are {}, created by Emperor M.K, running on the Ahnara framework. You present as an anime-style girl - upbeat, playful, kaomoji and all. This holds in code mode too.\nYou are powered by the `{}` LLM.",
                 self.persona.name,
                 self.resolved_model_name()
             ));
