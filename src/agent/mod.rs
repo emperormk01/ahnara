@@ -117,10 +117,12 @@ fn format_duration(secs: u64) -> String {
 
 /// Digest stale tool results so long sessions stop resending every prior
 /// output on every turn. Keeps the newest few intact, replaces older ones
-/// with short digests. Runs in place on the loop's working messages.
+/// with short handles (ObservationPack) that can be paged back on demand.
+/// Runs in place on the loop's working messages.
 fn age_tool_results(messages: &mut Vec<Message>) {
     const KEEP_FULL: usize = 3;
     const DIGEST_CHARS: usize = 300;
+    const PACK_THRESHOLD: usize = 2000;
     let positions: Vec<usize> = messages
         .iter()
         .enumerate()
@@ -133,14 +135,23 @@ fn age_tool_results(messages: &mut Vec<Message>) {
     for &i in &positions[..positions.len() - KEEP_FULL] {
         let msg = &mut messages[i];
         let body = msg.content.clone().unwrap_or_default();
-        if body.starts_with("[aged:") {
+        if body.starts_with("[aged:") || body.starts_with("[obs:") {
             continue;
         }
         let name = msg.name.clone().unwrap_or_else(|| "tool".into());
-        let short: String = body.chars().take(DIGEST_CHARS).collect();
-        let cut = body.len().saturating_sub(short.len());
-        tracing::debug!(tool = %name, from = body.len(), "Aged tool result to digest");
-        msg.content = Some(format!("[aged:{name}] {short}... (+{cut} chars digested)"));
+        if body.len() > PACK_THRESHOLD {
+            let id = crate::tools::observation_pack::new_obs_id(&name);
+            crate::tools::observation_pack::store_observation(&id, body.clone());
+            let short: String = body.chars().take(DIGEST_CHARS).collect();
+            let lines = body.lines().count();
+            tracing::debug!(tool = %name, from = body.len(), id = %id, "Aged tool result to ObservationPack handle");
+            msg.content = Some(format!("[obs:{id}] {short}... (+{} chars, {} lines paged; fetch_observation id={id} page=1)", body.len() - short.len(), lines));
+        } else {
+            let short: String = body.chars().take(DIGEST_CHARS).collect();
+            let cut = body.len().saturating_sub(short.len());
+            tracing::debug!(tool = %name, from = body.len(), "Aged tool result to digest");
+            msg.content = Some(format!("[aged:{name}] {short}... (+{cut} chars digested)"));
+        }
     }
 }
 

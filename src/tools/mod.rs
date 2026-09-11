@@ -12,6 +12,8 @@ pub mod vision;
 pub mod web;
 pub mod session_tools;
 pub mod transcribe;
+pub mod observation_pack;
+pub mod reducer;
 
 pub use executor::ExecuteCodeTool;
 pub use scheduler_tools::{SchedulerManager, CronHandle};

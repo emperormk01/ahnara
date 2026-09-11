@@ -116,6 +116,25 @@ impl Compactor {
         self.cooldown.can_compact(session_id)
     }
 
+    /// Online Context Compact: trigger at subtask boundaries when a fused
+    /// write+validate succeeds and window pressure is high. This moves
+    /// compaction from panic-at-limit to proactive at task completion,
+    /// saving replay tokens on every future turn.
+    pub fn should_compact_at_boundary(&self, session_id: &str, message_count: usize, fused_success: bool) -> bool {
+        if !self.config.compaction_enabled {
+            return false;
+        }
+        if !fused_success {
+            return false;
+        }
+        // Lower threshold at boundaries: half the normal, but still needs pressure
+        let boundary_threshold = (self.config.compaction_threshold / 2).max(8);
+        if message_count < boundary_threshold {
+            return false;
+        }
+        self.cooldown.can_compact(session_id)
+    }
+
     /// Compact a session's history
     pub async fn compact(&self, session: &mut SessionHistory) -> Result<CompactionResult> {
         let original_count = session.messages.len();

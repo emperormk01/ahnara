@@ -91,6 +91,9 @@ impl ToolOrchestrator {
         self.register(Arc::new(BrowserGetTool));
         self.register(Arc::new(BrowserCloseTool));
         self.register(Arc::new(XFetchTool));
+        // ObservationPack handle recall
+        use crate::tools::observation_pack::FetchObservationTool;
+        self.register(Arc::new(FetchObservationTool));
     }
 
     pub fn register_schedule_tool(&self, log: crate::scheduler::ScheduleRunLog) {

@@ -96,14 +96,15 @@ pub struct EditFileTool;
 #[async_trait]
 impl Tool for EditFileTool {
     fn name(&self) -> &str { "edit_file" }
-    fn description(&self) -> &str { "Replace text in a file. Finds the exact old_text and replaces it with new_text. You MUST read the file first." }
+    fn description(&self) -> &str { "Replace text in a file. Finds the exact old_text and replaces it with new_text. You MUST read the file first. Action Fusion: add validate to run a check command in the same call and save one model round trip." }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Absolute path to the file"},
                 "old_text": {"type": "string", "description": "Exact text to find and replace (must match exactly)"},
-                "new_text": {"type": "string", "description": "Replacement text"}
+                "new_text": {"type": "string", "description": "Replacement text"},
+                "validate": {"type": "string", "description": "Optional shell command to run after write and return result inline (Action Fusion: saves one round trip)"}
             },
             "required": ["path", "old_text", "new_text"]
         })
@@ -130,10 +131,16 @@ impl Tool for EditFileTool {
         tokio::fs::write(path, &new_content).await
             .map_err(|e| anyhow!("Failed to write {}: {}", path, e))?;
 
+        let mut output = serde_json::json!({ "status": "replaced", "path": path });
+        if let Some(validate) = args["validate"].as_str().filter(|s| !s.is_empty()) {
+            let fused = run_validate(validate).await;
+            output["validation"] = fused;
+        }
+
         Ok(ToolResult {
             tool_name: self.name().into(),
             success: true,
-            output: serde_json::json!({ "status": "replaced", "path": path }),
+            output,
             error: None,
             duration_ms: 0,
         })
@@ -147,14 +154,15 @@ pub struct EditFileLlmTool;
 #[async_trait]
 impl Tool for EditFileLlmTool {
     fn name(&self) -> &str { "edit_file_llm" }
-    fn description(&self) -> &str { "Edit a file using natural language instructions. Provide the path and instructions describing what to change. The tool reads the current content, applies your instructions, and writes the result. You MUST read the file first." }
+    fn description(&self) -> &str { "Edit a file using natural language instructions. Provide the path and instructions describing what to change. The tool reads the current content, applies your instructions, and writes the result. You MUST read the file first. Action Fusion: add validate to run a check command in the same call." }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Absolute path to the file"},
                 "instructions": {"type": "string", "description": "Natural language description of the edit to make"},
-                "code_edit": {"type": "string", "description": "The new code/content to write, with '// ... existing code ...' placeholders for unchanged regions"}
+                "code_edit": {"type": "string", "description": "The new code/content to write, with '// ... existing code ...' placeholders for unchanged regions"},
+                "validate": {"type": "string", "description": "Optional shell command to run after write and return result inline (Action Fusion: saves one round trip)"}
             },
             "required": ["path", "instructions", "code_edit"]
         })
@@ -180,13 +188,47 @@ impl Tool for EditFileLlmTool {
         tokio::fs::write(path, &new_content).await
             .map_err(|e| anyhow!("Failed to write {}: {}", path, e))?;
 
+        let mut output = serde_json::json!({ "status": "edited", "path": path, "instructions": instructions });
+        if let Some(validate) = args["validate"].as_str().filter(|s| !s.is_empty()) {
+            let fused = run_validate(validate).await;
+            output["validation"] = fused;
+        }
+
         Ok(ToolResult {
             tool_name: self.name().into(),
             success: true,
-            output: serde_json::json!({ "status": "edited", "path": path, "instructions": instructions }),
+            output,
             error: None,
             duration_ms: 0,
         })
+    }
+}
+
+// ─── fused validate helper (Action Fusion) ───────────────────────────────────
+
+async fn run_validate(command: &str) -> serde_json::Value {
+    let start = std::time::Instant::now();
+    let output = tokio::process::Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .output()
+        .await;
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    match output {
+        Ok(o) => serde_json::json!({
+            "command": command,
+            "exit_code": o.status.code().unwrap_or(-1),
+            "stdout": String::from_utf8_lossy(&o.stdout).chars().take(4000).collect::<String>(),
+            "stderr": String::from_utf8_lossy(&o.stderr).chars().take(2000).collect::<String>(),
+            "duration_ms": elapsed_ms,
+            "success": o.status.success()
+        }),
+        Err(e) => serde_json::json!({
+            "command": command,
+            "error": e.to_string(),
+            "duration_ms": elapsed_ms,
+            "success": false
+        }),
     }
 }
 
@@ -197,13 +239,14 @@ pub struct CreateOrRewriteFileTool;
 #[async_trait]
 impl Tool for CreateOrRewriteFileTool {
     fn name(&self) -> &str { "create_or_rewrite_file" }
-    fn description(&self) -> &str { "Create a new file or completely rewrite an existing one. Creates parent directories automatically." }
+    fn description(&self) -> &str { "Create a new file or completely rewrite an existing one. Creates parent directories automatically. Action Fusion: add validate to run a check command in the same call." }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Absolute path for the file"},
-                "content": {"type": "string", "description": "Full file content to write"}
+                "content": {"type": "string", "description": "Full file content to write"},
+                "validate": {"type": "string", "description": "Optional shell command to run after write and return result inline (Action Fusion: saves one round trip)"}
             },
             "required": ["path", "content"]
         })
@@ -220,10 +263,16 @@ impl Tool for CreateOrRewriteFileTool {
         tokio::fs::write(path, content).await
             .map_err(|e| anyhow!("Failed to write {}: {}", path, e))?;
 
+        let mut output = serde_json::json!({ "status": "written", "path": path, "bytes": content.len() });
+        if let Some(validate) = args["validate"].as_str().filter(|s| !s.is_empty()) {
+            let fused = run_validate(validate).await;
+            output["validation"] = fused;
+        }
+
         Ok(ToolResult {
             tool_name: self.name().into(),
             success: true,
-            output: serde_json::json!({ "status": "written", "path": path, "bytes": content.len() }),
+            output,
             error: None,
             duration_ms: 0,
         })
